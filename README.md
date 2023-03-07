@@ -19,9 +19,9 @@ The mobile workflow is designed to publish code during all phases of development
 
 ### Actions
 
-- [expo-eas-build](/oncoursesystems/workflows/tree/main/.github/workflows/expo-eas-build.yml) ([docs](/oncoursesystems/workflows/tree/main/docs/expo-eas-build.md)) - queues a build in Expo EAS
-- [expo-eas-clean](/oncoursesystems/workflows/tree/main/.github/workflows/expo-eas-clean.yml) ([docs](/oncoursesystems/workflows/tree/main/docs/expo-eas-clean.md)) - cleans up old branches/channels in EAS
-- [expo-eas-submit](/oncoursesystems/workflows/tree/main/.github/workflows/expo-eas-submit.yml) ([docs](/oncoursesystems/workflows/tree/main/docs/expo-eas-submit.md)) - submits builds to the app stores
-- [expo-eas-update](/oncoursesystems/workflows/tree/main/.github/workflows/expo-eas-update.yml) ([docs](/oncoursesystems/workflows/tree/main/docs/expo-eas-update.md)) - publishes changes to a channel via Expo EAS
-- [mobile-cd](/oncoursesystems/workflows/tree/main/.github/workflows/mobile-cd.yml) ([docs](/oncoursesystems/workflows/tree/main/docs/mobile-cd.md)) - manages publishing a mobile application release
-- [mobile-ci](/oncoursesystems/workflows/tree/main/.github/workflows/mobile-ci.yml) ([docs](/oncoursesystems/workflows/tree/main/docs/mobile-ci.md)) - manages publishing of a mobile application during the development lifecycle
+- [expo-eas-build](.github/workflows/expo-eas-build.yml) ([docs](docs/expo-eas-build.md)) - queues a build in Expo EAS
+- [expo-eas-clean](.github/workflows/expo-eas-clean.yml) ([docs](docs/expo-eas-clean.md)) - cleans up old branches/channels in EAS
+- [expo-eas-submit](.github/workflows/expo-eas-submit.yml) ([docs](docs/expo-eas-submit.md)) - submits builds to the app stores
+- [expo-eas-update](.github/workflows/expo-eas-update.yml) ([docs](docs/expo-eas-update.md)) - publishes changes to a channel via Expo EAS
+- [mobile-cd](.github/workflows/mobile-cd.yml) ([docs](docs/mobile-cd.md)) - manages publishing a mobile application release
+- [mobile-ci](.github/workflows/mobile-ci.yml) ([docs](docs/mobile-ci.md)) - manages publishing of a mobile application during the development lifecycle
