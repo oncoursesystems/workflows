@@ -1,0 +1,41 @@
+name: expo-eas-clean
+
+on:
+  workflow_call:
+    secrets:
+      expo-token:
+        description: 'expo token'
+        required: true
+    inputs:
+      channel:
+        type: string
+        required: true
+      runs-on:
+        type: string
+        default: self-hosted
+
+jobs:
+  eas-clean:
+    runs-on: ${{ inputs.runs-on }}
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+      - name: ⚙️ Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          packager: npm
+          token: ${{ secrets.expo-token }}
+      - name: 🏦 Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+      - name: 📦 Install dependencies
+        if: steps.cache-npm.outputs.cache-hit != 'true'
+        run: npm ci --ignore scripts
+      - name: 🚀 EAS delete PR channel
+        run: eas channel:delete ${{ inputs.channel }} --non-interactive
+      - name: 🚀 EAS delete PR branch
+        run: eas branch:delete ${{ inputs.channel }} --json --non-interactive

@@ -1,0 +1,12 @@
+name: cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  clean:
+    uses: oncoursesystems/reusable-workflows/.github/workflows/expo-eas-cleanup.yml@master
+    with:
+      channel: ${{ format('pr-{0}', github.event.number) }}
+      runs-on: self-hosted

@@ -1,0 +1,31 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      semver:
+        description: The semver to use
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+  pull_request:
+    types: [closed]
+
+jobs:
+  release:
+    # must run on a linux runner
+    runs-on: [self-hosted, Linux]  
+    steps:
+      - uses: nearform/optic-release-automation-action@v4
+        with:
+          github-token: ${{ secrets.github_token }}
+          semver: ${{ github.event.inputs.semver }}
+          commit-message: 'chore: release {version}'
+          # the bump:version script must be added to the package.json file and can be found in the examples folder
+          build-command: |
+            npm ci
+            npm run bump:version

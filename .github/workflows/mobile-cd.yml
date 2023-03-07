@@ -1,0 +1,27 @@
+name: mobile-cd
+
+on:
+  workflow_call:
+
+jobs:
+  eas-update:
+    uses: ./.github/workflows/expo-eas-update.yml
+    with:
+      channel: production
+      message: ${{ github.event.release.tag_name }}
+    secrets:
+      expo-token: ${{ secrets.EXPO_TOKEN }}
+
+  submit-ios:
+    uses: ./.github/workflows/expo-eas-submit.yml
+    with:
+      platform: 'ios'
+    secrets:
+      expo-token: ${{ secrets.EXPO_TOKEN }}
+
+  submit-android:
+    uses: ./.github/workflows/expo-eas-submit.yml
+    with:
+      platform: 'android'
+    secrets:
+      expo-token: ${{ secrets.EXPO_TOKEN }}

@@ -1,0 +1,8 @@
+{
+    "name": "my-app",
+    "version": "1.0.0",
+    "versionCode": 1,
+    "scripts": {
+      "bump:version": "node scripts/bump-version.js"
+    }
+}

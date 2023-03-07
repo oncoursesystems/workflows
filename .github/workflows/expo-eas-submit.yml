@@ -1,0 +1,48 @@
+name: expo-eas-submit
+
+on:
+  workflow_call:
+    secrets:
+      expo-token:
+        description: 'expo token'
+        required: true
+    inputs:
+      platform:
+        type: string
+        default: all
+      profile:
+        type: string
+        default: production
+      runs-on:
+        type: string
+        default: self-hosted
+
+jobs:
+  eas-submit:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+      - name: ⚙️ Setup NodeJS
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: ⚙️ Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          expo-cache: true
+          expo-version: latest
+          eas-version: latest
+          packager: npm
+          token: ${{ secrets.expo-token }}
+      - name: 🏦 Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+      - name: 📦 Install dependencies
+        if: steps.cache-npm.outputs.cache-hit != 'true'
+        run: npm ci --ignore scripts
+      - name: 🚀 EAS Submit
+        run: eas submit --platform ${{ inputs.platform }} --profile ${{ inputs.profile }} --non-interactive --latest

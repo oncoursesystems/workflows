@@ -1,0 +1,56 @@
+name: expo-eas-update
+
+on:
+  workflow_call:
+    secrets:
+      expo-token:
+        description: 'expo token'
+        required: true
+    inputs:
+      channel:
+        type: string
+        required: true
+      message:
+        type: string
+      runs-on:
+        type: string
+        default: self-hosted
+
+jobs:
+  eas-update:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+      - name: ⚙️ Setup NodeJS
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: ⚙️ Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          packager: npm
+          expo-cache: true
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.expo-token }}
+      - name: 🏦 Cache dependencies
+        id: cache-npm
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+      - name: 📦 Install dependencies
+        if: steps.cache-npm.outputs.cache-hit != 'true'
+        run: npm ci --ignore scripts
+      - name: 😷 Sanitize message
+        uses: actions/github-script@v6
+        id: sanitize-message
+        with:
+          script: return `${{ inputs.message }}`.replaceAll('"',"'").replaceAll('\n'," ")
+          result-encoding: string
+      - name: 🚀 EAS update
+        uses: expo/expo-github-action/preview@v8
+        with:
+          command: eas update --branch ${{ inputs.channel }} --message "${{ steps.sanitize-message.outputs.result }}"
