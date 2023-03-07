@@ -3,5 +3,5 @@ on:
     types: [published]
 jobs:
   cd:
-    uses: oncoursesystems/reusable-workflows/.github/workflows/mobile-cd@master
+    uses: oncoursesystems/workflows/.github/workflows/mobile-cd@main
     secrets: inherit

@@ -7,5 +7,5 @@ on:
       - master
 jobs:
   cd:
-    uses: oncoursesystems/reusable-workflows/.github/workflows/mobile-ci@master
+    uses: oncoursesystems/workflows/.github/workflows/mobile-ci@main
     secrets: inherit
