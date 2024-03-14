@@ -20,7 +20,7 @@ jobs:
   submit-ios:
     uses: ./.github/workflows/expo-eas-submit.yml
     with:
-      platform: 'ios'
+      platform: "ios"
       runs-on: ${{ inputs.runs-on }}
     secrets:
       expo-token: ${{ secrets.EXPO_TOKEN }}
@@ -28,7 +28,7 @@ jobs:
   submit-android:
     uses: ./.github/workflows/expo-eas-submit.yml
     with:
-      platform: 'android'
+      platform: "android"
       runs-on: ${{ inputs.runs-on }}
     secrets:
       expo-token: ${{ secrets.EXPO_TOKEN }}

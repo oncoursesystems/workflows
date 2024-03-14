@@ -1,0 +1,18 @@
+name: pr-preview-deploy
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  docker-build:
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      runs-on: ${{ inputs.runs-on }}
+
+  cd:
+    uses: oncoursesystems/workflows/.github/workflows/pr-preview-deploy@main
+    secrets: inherit
+    with:
+      base-url: preview.oncoursesystems.com
+      values-yaml: ./github/workflows/pr-preview-values.yaml

@@ -1,0 +1,10 @@
+name: pr-preview-cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup-pr:
+    uses: oncoursesystems/workflows/.github/workflows/pr-preview-cleanup@main
+    secrets: inherit

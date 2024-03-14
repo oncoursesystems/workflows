@@ -1,0 +1,101 @@
+name: web-ci
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        default: self-hosted
+      enable-pr-preview:
+        type: string
+        default: true
+      dotnet-version:
+        type: string
+        default: 8.0.x
+      dotnet-project-file:
+        type: string
+        required: false
+      nodejs-project-path:
+        type: string
+        required: false
+        default: .
+      pr-preview-base-url:
+        type: string
+
+jobs:
+  check-lang:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+
+      - name: 🧪 Test for NodeJS
+        id: nodejs
+        uses: andstor/file-existence-action@v3
+        with:
+          files: "**/package.json"
+
+      - name: 🧪 Test for Dotnet Core
+        id: dotnet-core
+        uses: andstor/file-existence-action@v3
+        with:
+          files: "**/*.csproj, **/appSettings.json"
+
+      - name: 🧪 Test for Dotnet Framework
+        id: dotnet-framework
+        uses: andstor/file-existence-action@v3
+        with:
+          files: "**/*.csproj, **/Web.config"
+
+  build-nodejs:
+    runs-on: ${{ inputs.runs-on }}
+    needs: check-lang
+    if: needs.check-lang.nodejs.files_exists
+    steps:
+      - name: ⚙️ Setup NodeJS
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+
+      - name: 🏦 Cache dependencies
+        id: cache-npm
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+
+      - name: 📦 Install dependencies
+        if: steps.cache-npm.outputs.cache-hit != 'true'
+        working-directory: ${{ nodejs-project-path }}
+        run: npm ci --ignore scripts
+
+  build-dotnet-core:
+    runs-on: ${{ inputs.runs-on }}
+    needs: check-lang
+    if: needs.check-lang.dotnet-core.files_exists
+    steps:
+      - name: ⚙️ Setup Dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: 🚀 Dotnet build
+        run: dotnet build --configuration Release
+
+  build-dotnet-framework:
+    runs-on: ${{ inputs.runs-on }}
+    needs: check-lang
+    if: needs.check-lang.dotnet-framework.files_exists
+    steps:
+      - name: ⚙️ Setup MSBuild
+        uses: actions/setup-msbuild@v1
+
+      - name: ⚙️ Setup Nuget
+        uses: actions/setup-nuget@v1.0.2
+
+      - name: 📦 Restore packages
+        run: nuget restore ${{ inputs.project-file }}
+
+      - name: 🚀 Dotnet build
+        run: msbuild.exe ${{ inputs.project-file }} /nologo /nr:false /p:platform="Any CPU" /p:configuration="Release"
