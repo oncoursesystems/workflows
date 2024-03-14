@@ -45,7 +45,7 @@ jobs:
   build-nodejs:
     runs-on: ${{ inputs.runs-on }}
     needs: check-lang
-    if: needs.check-lang.steps.nodejs.outputs.files_exists == 'true'
+    if: steps.nodejs.outputs.files_exists == 'true'
     steps:
       - name: ⚙️ Setup NodeJS
         uses: actions/setup-node@v3
@@ -68,7 +68,7 @@ jobs:
   build-dotnet-core:
     runs-on: ${{ inputs.runs-on }}
     needs: check-lang
-    if: needs.check-lang.steps.dotnet-core.outputs.files_exists == 'true'
+    if: steps.dotnet-core.outputs.files_exists == 'true'
     steps:
       - name: ⚙️ Setup Dotnet
         uses: actions/setup-dotnet@v4
