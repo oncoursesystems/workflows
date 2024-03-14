@@ -18,31 +18,42 @@ on:
         default: .
 
 jobs:
-  checkout:
+  check-lang:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v3
 
-  build-nodejs:
-    runs-on: ${{ inputs.runs-on }}
-    needs: checkout
-    steps:
       - name: 🧪 Test for NodeJS
-        id: test
+        id: nodejs
         uses: andstor/file-existence-action@v3
         with:
           files: "**/package.json"
 
+      - name: 🧪 Test for Dotnet Core
+        id: dotnet-core
+        uses: andstor/file-existence-action@v3
+        with:
+          files: "**/*.csproj, **/appSettings.json"
+
+      - name: 🧪 Test for Dotnet Framework
+        id: dotnet-framework
+        uses: andstor/file-existence-action@v3
+        with:
+          files: "**/*.csproj, **/Web.config"
+
+  build-nodejs:
+    runs-on: ${{ inputs.runs-on }}
+    needs: check-lang
+    if: needs.check-lang.nodejs.outputs.files_exists == 'true'
+    steps:
       - name: ⚙️ Setup NodeJS
-        if: steps.test.files_exists
         uses: actions/setup-node@v3
         with:
           node-version-file: .nvmrc
           cache: "npm"
 
       - name: 🏦 Cache dependencies
-        if: steps.test.files_exists
         id: cache-npm
         uses: actions/cache@v3
         with:
@@ -50,52 +61,36 @@ jobs:
           key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
 
       - name: 📦 Install dependencies
-        if: steps.test.files_exists && steps.cache-npm.outputs.cache-hit != 'true'
+        if: steps.cache-npm.outputs.cache-hit != 'true'
         working-directory: ${{ inputs.nodejs-project-path }}
         run: npm ci --ignore scripts
 
   build-dotnet-core:
     runs-on: ${{ inputs.runs-on }}
-    needs: checkout
+    needs: check-lang
+    if: needs.check-lang.dotnet-core.outputs.files_exists == 'true'
     steps:
-      - name: 🧪 Test for Dotnet Core
-        id: test
-        uses: andstor/file-existence-action@v3
-        with:
-          files: "**/*.csproj, **/appSettings.json"
-
       - name: ⚙️ Setup Dotnet
-        if: steps.test.files_exists
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
       - name: 🚀 Dotnet build
-        if: steps.test.files_exists
         run: dotnet build --configuration Release
 
   build-dotnet-framework:
     runs-on: ${{ inputs.runs-on }}
-    needs: checkout
+    needs: check-lang
+    if: needs.check-lang.dotnet-framework.outputs.files_exists == 'true'
     steps:
-      - name: 🧪 Test for Dotnet Framework
-        id: test
-        uses: andstor/file-existence-action@v3
-        with:
-          files: "**/*.csproj, **/Web.config"
-
       - name: ⚙️ Setup MSBuild
-        if: steps.test.files_exists
-        uses: actions/setup-msbuild@v1
+        uses: microsoft/setup-msbuild@v2
 
       - name: ⚙️ Setup Nuget
-        if: steps.test.files_exists
-        uses: actions/setup-nuget@v1.0.2
+        uses: nuget/setup-nuget@v2
 
       - name: 📦 Restore packages
-        if: steps.test.files_exists
         run: nuget restore ${{ inputs.project-file }}
 
       - name: 🚀 Dotnet build
-        if: steps.test.files_exists
         run: msbuild.exe ${{ inputs.project-file }} /nologo /nr:false /p:platform="Any CPU" /p:configuration="Release"
