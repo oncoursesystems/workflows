@@ -44,7 +44,6 @@ jobs:
 
   build-nodejs:
     runs-on: ${{ inputs.runs-on }}
-    needs: check-lang
     if: needs.check-lang.nodejs.files_exists
     steps:
       - name: ⚙️ Setup NodeJS
@@ -67,7 +66,6 @@ jobs:
 
   build-dotnet-core:
     runs-on: ${{ inputs.runs-on }}
-    needs: check-lang
     if: needs.check-lang.dotnet-core.files_exists
     steps:
       - name: ⚙️ Setup Dotnet
@@ -80,7 +78,6 @@ jobs:
 
   build-dotnet-framework:
     runs-on: ${{ inputs.runs-on }}
-    needs: check-lang
     if: needs.check-lang.dotnet-framework.files_exists
     steps:
       - name: ⚙️ Setup MSBuild
