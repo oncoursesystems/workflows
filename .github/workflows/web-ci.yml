@@ -40,13 +40,14 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: "npm"
+          cache-dependency-path: ${{ inputs.nodejs-project-path }}/package-lock.json
 
       - name: 🏦 Cache dependencies
         if: steps.test.outputs.files_exists
         id: cache-npm
         uses: actions/cache@v3
         with:
-          path: node_modules
+          path: ${{ inputs.nodejs-project-path }}/node_modules
           key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
 
       - name: 📦 Install dependencies
@@ -94,7 +95,7 @@ jobs:
 
       - name: ⚙️ Setup Nuget
         if: steps.test.outputs.files_exists
-        uses: nuget/setup-nuget@2
+        uses: nuget/setup-nuget@v2
 
       - name: 📦 Restore packages
         if: steps.test.outputs.files_exists
