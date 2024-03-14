@@ -12,22 +12,22 @@ on:
       dotnet-project-file:
         type: string
         required: false
+      nodejs-version:
+        type: string
+        required: false
+        default: latest
       nodejs-project-path:
         type: string
         required: false
         default: .
 
 jobs:
-  checkout:
+  build-nodejs:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v3
 
-  build-nodejs:
-    runs-on: ${{ inputs.runs-on }}
-    needs: checkout
-    steps:
       - name: 🧪 Test for NodeJS
         id: test
         uses: andstor/file-existence-action@v3
@@ -38,7 +38,7 @@ jobs:
         if: steps.test.outputs.files_exists
         uses: actions/setup-node@v3
         with:
-          node-version-file: .nvmrc
+          node-version: ${{ inputs.node-version }}
           cache: "npm"
 
       - name: 🏦 Cache dependencies
@@ -56,8 +56,10 @@ jobs:
 
   build-dotnet-core:
     runs-on: ${{ inputs.runs-on }}
-    needs: checkout
     steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+
       - name: 🧪 Test for Dotnet Core
         id: test
         uses: andstor/file-existence-action@v3
@@ -76,8 +78,10 @@ jobs:
 
   build-dotnet-framework:
     runs-on: ${{ inputs.runs-on }}
-    needs: checkout
     steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+
       - name: 🧪 Test for Dotnet Framework
         id: test
         uses: andstor/file-existence-action@v3
@@ -86,11 +90,11 @@ jobs:
 
       - name: ⚙️ Setup MSBuild
         if: steps.test.outputs.files_exists
-        uses: actions/setup-msbuild@v1
+        uses: microsoft/setup-msbuild@v2
 
       - name: ⚙️ Setup Nuget
         if: steps.test.outputs.files_exists
-        uses: actions/setup-nuget@v1.0.2
+        uses: nuget/setup-nuget@2
 
       - name: 📦 Restore packages
         if: steps.test.outputs.files_exists
