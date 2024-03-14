@@ -63,7 +63,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: ⚙️  Setup QEMU
-        uses: actions/setup-qemu-action@v3.0.0
+        uses: docker/setup-qemu-action@v3.0.0
 
       - name: ⚙️  Setup Docker BuildX
         id: buildx
