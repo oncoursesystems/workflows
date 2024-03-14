@@ -6,9 +6,6 @@ on:
       runs-on:
         type: string
         default: self-hosted
-      enable-pr-preview:
-        type: string
-        default: true
       dotnet-version:
         type: string
         default: 8.0.x
@@ -19,8 +16,6 @@ on:
         type: string
         required: false
         default: .
-      pr-preview-base-url:
-        type: string
 
 jobs:
   check-lang:
@@ -67,7 +62,7 @@ jobs:
 
       - name: 📦 Install dependencies
         if: steps.cache-npm.outputs.cache-hit != 'true'
-        working-directory: ${{ nodejs-project-path }}
+        working-directory: ${{ inputs.nodejs-project-path }}
         run: npm ci --ignore scripts
 
   build-dotnet-core:
