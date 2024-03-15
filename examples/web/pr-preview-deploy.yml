@@ -7,11 +7,13 @@ on:
 jobs:
   docker-build:
     uses: ./.github/workflows/docker-build.yml
+    secrets: inherit
     with:
       runs-on: ${{ inputs.runs-on }}
 
   cd:
-    uses: oncoursesystems/workflows/.github/workflows/pr-preview-deploy@main
+    needs: docker-build
+    uses: oncoursesystems/workflows/.github/workflows/pr-preview-deploy.yml@main
     secrets: inherit
     with:
       base-url: preview.oncoursesystems.com

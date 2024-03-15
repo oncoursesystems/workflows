@@ -1,0 +1,20 @@
+name: create-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version number to generate, by default is the current timestamp of YYYY.MM.DD.HHMM
+        type: string
+        required: false
+
+jobs:
+  create-release:
+    uses: oncoursesystems/workflows/.github/workflows/create-release.yml@main
+    secrets: inherit
+    with:
+      version: ${{ inputs.version }}
+  cd:
+    needs: create-release
+    uses: oncoursesystems/workflows/.github/workflows/web-cd.yml@main
+    secrets: inherit
