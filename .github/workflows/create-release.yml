@@ -1,0 +1,38 @@
+name: create-release
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        default: self-hosted
+      version:
+        description: Use to override the default generated version
+        required: false
+        type: string
+
+jobs:
+  release:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Install GitHub CLI
+        uses: alexellis/arkade-get@master
+        with:
+          gh: latest
+
+      - name: Generate version number - Windows OS
+        if: ${{ runner.os == 'Windows' }}
+        shell: powershell
+        run: |
+          echo "VERSION=$((Get-Date).ToString("yyyy.MM.dd.HHmm"))" >> ${GITHUB_ENV}
+
+      - name: Generate version number - Linux/Mac OS
+        if: ${{ runner.os != 'Windows' }}
+        run: |
+          echo "VERSION=$(date +"%Y.%m.%d.%H%M")" >> ${GITHUB_ENV}
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${VERSION}" --title="v${VERSION}" --generate-notes
