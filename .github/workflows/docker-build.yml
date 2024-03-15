@@ -96,7 +96,7 @@ jobs:
       - name: 🚀 Docker Build
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
         with:
-          plaforms: ${{ inputs.platforms }}
+          platforms: ${{ inputs.platforms }}
           context: ${{ inputs.context }}
           builder: ${{ steps.buildx.outputs.name }}
           push: ${{ inputs.push }}
