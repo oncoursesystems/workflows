@@ -1,0 +1,106 @@
+name: web-ci
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        default: self-hosted
+      dotnet-version:
+        type: string
+        default: 8.0.x
+      dotnet-project-file:
+        type: string
+        required: false
+      nodejs-version:
+        type: string
+        required: false
+        default: latest
+      nodejs-project-path:
+        type: string
+        required: false
+        default: .
+
+jobs:
+  build-nodejs:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+
+      - name: 🧪 Test for NodeJS
+        id: test
+        uses: andstor/file-existence-action@v3
+        with:
+          files: "**/package.json"
+
+      - name: ⚙️ Setup NodeJS
+        if: steps.test.outputs.files_exists == 'true'
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: "npm"
+          cache-dependency-path: ${{ inputs.nodejs-project-path }}/package-lock.json
+
+      - name: 🏦 Cache dependencies
+        if: steps.test.outputs.files_exists == 'true'
+        id: cache-npm
+        uses: actions/cache@v3
+        with:
+          path: ${{ inputs.nodejs-project-path }}/node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+
+      - name: 📦 Install dependencies
+        if: steps.test.outputs.files_exists == 'true' && steps.cache-npm.outputs.cache-hit != 'true'
+        working-directory: ${{ inputs.nodejs-project-path }}
+        run: npm ci --ignore scripts
+
+  build-dotnet-core:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+
+      - name: 🧪 Test for Dotnet Core
+        id: test
+        uses: andstor/file-existence-action@v3
+        with:
+          files: "**/*.csproj, **/appSettings.json"
+
+      - name: ⚙️ Setup Dotnet
+        if: steps.test.outputs.files_exists == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: 🚀 Dotnet build
+        if: steps.test.outputs.files_exists == 'true'
+        run: dotnet build --configuration Release
+
+  build-dotnet-framework:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+
+      - name: 🧪 Test for Dotnet Framework
+        id: test
+        uses: andstor/file-existence-action@v3
+        with:
+          files: "**/*.csproj, **/Web.config"
+
+      - name: ⚙️ Setup MSBuild
+        if: steps.test.outputs.files_exists == 'true'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: ⚙️ Setup Nuget
+        if: steps.test.outputs.files_exists == 'true'
+        uses: nuget/setup-nuget@v2
+
+      - name: 📦 Restore packages
+        if: steps.test.outputs.files_exists == 'true'
+        run: nuget restore ${{ inputs.project-file }}
+
+      - name: 🚀 Dotnet build
+        if: steps.test.outputs.files_exists == 'true'
+        run: msbuild.exe ${{ inputs.project-file }} /nologo /nr:false /p:platform="Any CPU" /p:configuration="Release"

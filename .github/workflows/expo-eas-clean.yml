@@ -4,7 +4,7 @@ on:
   workflow_call:
     secrets:
       expo-token:
-        description: 'expo token'
+        description: "expo token"
         required: true
     inputs:
       channel:

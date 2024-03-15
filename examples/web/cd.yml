@@ -1,0 +1,10 @@
+name: cd
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  cd:
+    uses: oncoursesystems/workflows/.github/workflows/web-cd.yml@main
+    secrets: inherit
