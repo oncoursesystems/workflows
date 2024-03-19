@@ -12,6 +12,9 @@ on:
       base-url:
         type: string
         required: true
+      chart-repository:
+        type: string
+        default: https://bjw-s.github.io/helm-charts
       chart-name:
         type: string
         default: app-template
@@ -27,13 +30,20 @@ jobs:
     if: ${{ github.event.label.name == inputs.label }}
     runs-on: ${{ inputs.runs-on }}
     steps:
+      - name: Add Helm repository
+        uses: wahyd4/kubectl-helm-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBECONFIG }}
+        with:
+          args: |
+            helm repo add pr-preview ${{ inputs.chart-repository }}
       - name: Install Helm chart
         uses: wahyd4/kubectl-helm-action@master
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBECONFIG }}
         with:
           args: |
-            helm upgrade pr-preview-${{ github.event.pull_request.number }} ${{ inputs.chart-name }} \
+            helm upgrade pr-preview-${{ github.event.pull_request.number }} pr-preview/${{ inputs.chart-name }} \
               --install \
               --namespace pr-preview \
               --create-namespace \
