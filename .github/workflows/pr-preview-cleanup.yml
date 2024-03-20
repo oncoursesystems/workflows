@@ -6,6 +6,12 @@ on:
       runs-on:
         type: string
         default: self-hosted
+      label:
+        type: string
+        default: preview
+      deployment-name:
+        type: string
+        default: pr-preview
       namespace:
         type: string
         default: pr-preview
@@ -13,11 +19,20 @@ on:
 jobs:
   cleanup:
     runs-on: ${{ inputs.runs-on }}
+    if: ${{ github.event.label.name == inputs.label }}
     steps:
+      - name: Delete Docker package
+        uses: bots-house/ghcr-delete-image-action@v1.1.0
+        with:
+          owner: oncoursesystems
+          name: package-name
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: pr-${{ github.event.pull_request.number }}
+
       - name: Delete Helm chart
         uses: wahyd4/kubectl-helm-action@master
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBECONFIG }}
         with:
           args: |
-            helm delete pr-preview-${{ github.event.pull_request.number }} --namespace ${{ inputs.namespace }}
+            helm delete ${{ inputs.deployment-name }}-${{ github.event.pull_request.number }} --namespace ${{ inputs.namespace }}

@@ -18,40 +18,32 @@ on:
       chart-name:
         type: string
         default: app-template
+      chart-version:
+        type: string
+        default: latest
       namespace:
         type: string
         default: pr-preview
       values-yaml:
         type: string
         required: true
+      deployment-name:
+        type: string
+        default: pr-preview
 
 jobs:
   install-chart:
     if: ${{ github.event.label.name == inputs.label }}
     runs-on: ${{ inputs.runs-on }}
     steps:
-      - name: Add Helm repository
-        uses: wahyd4/kubectl-helm-action@master
-        env:
-          KUBE_CONFIG_DATA: ${{ secrets.KUBECONFIG }}
-        with:
-          args: |
-            helm repo add pr-preview ${{ inputs.chart-repository }}
       - name: Install Helm chart
         uses: wahyd4/kubectl-helm-action@master
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBECONFIG }}
         with:
           args: |
-            helm upgrade pr-preview-${{ github.event.pull_request.number }} pr-preview/${{ inputs.chart-name }} \
-              --install \
-              --namespace pr-preview \
-              --create-namespace \
-              --wait \
-              --values ${{ inputs.values-yaml }} \
-              --set controllers.main.containers.main.image.tag=pr-${{ github.event.pull_request.number }} \
-              --set ingress.main.hosts[0].host=pr${{ github.event.pull_request.number }}.{{ inputs.base-url }} \
-              --set ingress.main.tls[0].hosts[0]=pr${{ github.event.pull_request.number }}.{{ inputs.base-url }}
+            helm repo add pr-preview ${{ inputs.chart-repository }}
+            helm upgrade ${{ inputs.deployment-name }}-${{ github.event.pull_request.number }} pr-preview/${{ inputs.chart-name }} --install --namespace ${{ inputs.namespace }} --create-namespace --version ${{ inputs.chart-version }} --wait --values ${{ inputs.values-yaml }} --set controllers.main.containers.main.image.tag=pr-${{ github.event.pull_request.number }} --set ingress.main.hosts[0].host=pr-${{ github.event.pull_request.number }}.{{ inputs.base-url }} --set ingress.main.tls[0].hosts[0]=pr-${{ github.event.pull_request.number }}.{{ inputs.base-url }}
 
   post-comment:
     needs: install-chart
