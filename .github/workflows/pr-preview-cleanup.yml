@@ -6,9 +6,6 @@ on:
       runs-on:
         type: string
         default: self-hosted
-      label:
-        type: string
-        default: preview
       deployment-name:
         type: string
         default: pr-preview
@@ -19,7 +16,6 @@ on:
 jobs:
   cleanup:
     runs-on: ${{ inputs.runs-on }}
-    if: ${{ github.event.label.name == inputs.label }}
     steps:
       - name: Delete Docker package
         uses: bots-house/ghcr-delete-image-action@v1.1.0

@@ -4,7 +4,25 @@ on:
   pull_request:
     types: [closed, unlabeled]
 
+env:
+  PREVIEW_LABEL: preview
+
 jobs:
-  cleanup-pr:
+  if: ${{ github.event.label.name == env.PREVIEW_LABEL }}
+  cleanup-image:
+    uses: oncoursesystems/workflows/.github/workflows/docker-cleanup.yml@main
+    secrets: inherit
+    with:
+      runs-on: linux
+
+  cleanup-chart:
+    strategy:
+      matrix:
+        env: [devel, staging]
     uses: oncoursesystems/workflows/.github/workflows/pr-preview-cleanup.yml@main
     secrets: inherit
+    with:
+      runs-on: linux
+      deployment-name: oncourse-systems-${{ matrix.env }}
+      base-url: oncoursesystems.com
+      values-yaml: .github/workflows/helm-values/pr-preview-${{ matrix.env }}.yml

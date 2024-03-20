@@ -4,17 +4,27 @@ on:
   pull_request:
     types: [labeled]
 
+env:
+  PREVIEW_LABEL: preview
+
 jobs:
+  if: ${{ github.event.label.name == env.PREVIEW_LABEL }}
+
   docker-build:
     uses: oncoursesystems/workflows/.github/workflows/docker-build.yml@main
     secrets: inherit
     with:
-      runs-on: ${{ inputs.runs-on }}
+      runs-on: linux
 
   cd:
     needs: docker-build
+    strategy:
+      matrix:
+        env: [devel, staging]
     uses: oncoursesystems/workflows/.github/workflows/pr-preview-deploy.yml@main
     secrets: inherit
     with:
+      runs-on: linux
+      deployment-name: oncourse-systems-${{ matrix.env }}
       base-url: preview.oncoursesystems.com
       values-yaml: ./github/workflows/pr-preview-values.yaml

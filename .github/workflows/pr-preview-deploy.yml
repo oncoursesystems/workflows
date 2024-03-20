@@ -6,9 +6,6 @@ on:
       runs-on:
         type: string
         default: self-hosted
-      label:
-        type: string
-        default: preview
       base-url:
         type: string
         required: true
@@ -33,7 +30,6 @@ on:
 
 jobs:
   install-chart:
-    if: ${{ github.event.label.name == inputs.label }}
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: Install Helm chart
