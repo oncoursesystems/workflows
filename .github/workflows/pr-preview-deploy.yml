@@ -32,6 +32,11 @@ jobs:
   install-chart:
     runs-on: ${{ inputs.runs-on }}
     steps:
+      - name: Checkout yaml file
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ inputs.values-yaml }}
       - name: Install Helm chart
         uses: wahyd4/kubectl-helm-action@master
         env:

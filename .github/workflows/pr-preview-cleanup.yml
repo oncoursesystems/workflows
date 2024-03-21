@@ -4,14 +4,25 @@ on:
   workflow_call:
     inputs:
       runs-on:
+        description: Defines the type of machine to run the workflow on
         type: string
+        required: false
         default: self-hosted
       deployment-name:
+        description: The name of the helm chart deployment
         type: string
+        required: false
         default: pr-preview
       namespace:
+        description: The namespace to install the helm chart
         type: string
+        required: false
         default: pr-preview
+      image-name:
+        description: The docker image name
+        type: string
+        required: false
+        default: ${{ github.repository }}
 
 jobs:
   cleanup:
@@ -21,7 +32,7 @@ jobs:
         uses: bots-house/ghcr-delete-image-action@v1.1.0
         with:
           owner: oncoursesystems
-          name: package-name
+          name: ${{ image-name }}
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: pr-${{ github.event.pull_request.number }}
 
