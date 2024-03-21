@@ -44,7 +44,7 @@ jobs:
         with:
           args: |
             helm repo add pr-preview ${{ inputs.chart-repository }}
-            helm upgrade ${{ inputs.deployment-name }}-${{ github.event.pull_request.number }} pr-preview/${{ inputs.chart-name }} \
+            helm upgrade ${{ inputs.deployment-name }}-pr${{ github.event.pull_request.number }} pr-preview/${{ inputs.chart-name }} \
               --install \
               --namespace ${{ inputs.namespace }} \
               --create-namespace \
