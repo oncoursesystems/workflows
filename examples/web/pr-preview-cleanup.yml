@@ -10,12 +10,17 @@ env:
 jobs:
   cleanup-image:
     if: ${{ github.event.label.name == env.PREVIEW_LABEL }}
-    uses: oncoursesystems/workflows/.github/workflows/docker-cleanup.yml@main
-    secrets: inherit
-    with:
-      runs-on: linux
+    runs-on: linux
+    steps:
+      - name: Delete Docker image
+        uses: bots-house/ghcr-delete-image-action@v1.1.0
+        with:
+          owner: oncoursesystems
+          name: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: pr-${{ github.event.pull_request.number }}
 
-  cleanup-chart:
+  cleanup-charts:
     if: ${{ github.event.label.name == env.PREVIEW_LABEL }}
     strategy:
       matrix:
