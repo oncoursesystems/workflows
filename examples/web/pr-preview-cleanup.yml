@@ -8,14 +8,15 @@ env:
   PREVIEW_LABEL: preview
 
 jobs:
-  if: ${{ github.event.label.name == env.PREVIEW_LABEL }}
   cleanup-image:
+    if: ${{ github.event.label.name == env.PREVIEW_LABEL }}
     uses: oncoursesystems/workflows/.github/workflows/docker-cleanup.yml@main
     secrets: inherit
     with:
       runs-on: linux
 
   cleanup-chart:
+    if: ${{ github.event.label.name == env.PREVIEW_LABEL }}
     strategy:
       matrix:
         env: [devel, staging]
@@ -24,5 +25,3 @@ jobs:
     with:
       runs-on: linux
       deployment-name: oncourse-systems-${{ matrix.env }}
-      base-url: oncoursesystems.com
-      values-yaml: .github/workflows/helm-values/pr-preview-${{ matrix.env }}.yml
