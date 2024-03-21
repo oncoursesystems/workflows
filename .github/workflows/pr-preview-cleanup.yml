@@ -46,6 +46,6 @@ jobs:
           comment-author: github-actions[bot]
           body-includes: https://pr-${{ github.event.pull_request.number }}.${{ inputs.base-url }}
       - name: Delete comment
-        uses: detomarco/delete-comment@v1
+        uses: detomarco/delete-comments@v1
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
