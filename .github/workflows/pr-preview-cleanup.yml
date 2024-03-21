@@ -8,6 +8,9 @@ on:
         type: string
         required: false
         default: self-hosted
+      base-url:
+        type: string
+        required: true
       deployment-name:
         description: The name of the helm chart deployment
         type: string
@@ -35,3 +38,14 @@ jobs:
         with:
           args: |
             helm delete ${{ inputs.deployment-name }}-${{ github.event.pull_request.number }} --namespace ${{ inputs.namespace }}
+      - name: Find comment
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.number }}
+          comment-author: github-actions[bot]
+          body-includes: https://pr-${{ github.event.pull_request.number }}.${{ inputs.base-url }}
+      - name: Delete comment
+        uses: detomarco/delete-comment@v1
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}

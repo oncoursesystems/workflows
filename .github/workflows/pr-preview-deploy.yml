@@ -68,6 +68,6 @@ jobs:
           msg: |
             Your pull request deployment is ready for review: 
             ```text
-            https://pr-${{ github.event.pull_request.number }}.${{ inputs.base-url }} 
+            https://pr-${{ github.event.pull_request.number }}.${{ inputs.base-url }}
             ```
           check_for_duplicate_msg: true
