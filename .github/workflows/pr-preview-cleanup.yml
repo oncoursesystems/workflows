@@ -32,7 +32,7 @@ jobs:
         uses: bots-house/ghcr-delete-image-action@v1.1.0
         with:
           owner: oncoursesystems
-          name: ${{ image-name }}
+          name: ${{ inputs.image-name }}
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: pr-${{ github.event.pull_request.number }}
 
