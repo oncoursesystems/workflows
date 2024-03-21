@@ -37,7 +37,7 @@ jobs:
         with:
           sparse-checkout: |
             ${{ inputs.values-yaml }}
-          parse-checkout-cone-mode: false
+          sparse-checkout-cone-mode: false
       - name: Install Helm chart
         uses: wahyd4/kubectl-helm-action@master
         env:
