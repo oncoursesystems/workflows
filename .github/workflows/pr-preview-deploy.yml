@@ -17,7 +17,7 @@ on:
         default: app-template
       chart-version:
         type: string
-        default: latest
+        default: 2.6.0
       namespace:
         type: string
         default: pr-preview
