@@ -39,13 +39,16 @@ jobs:
           args: |
             helm delete ${{ inputs.deployment-name }}-${{ github.event.pull_request.number }} --namespace ${{ inputs.namespace }}
       - name: Find comment
-        uses: peter-evans/find-comment@v3
+        uses: sandeshjangam/comment-actions@v1
         id: fc
         with:
-          issue-number: ${{ github.event.number }}
-          comment-author: github-actions[bot]
-          body-includes: https://pr-${{ github.event.pull_request.number }}.${{ inputs.base-url }}
+          type: find
+          number: ${{ github.event.number }}
+          author: github-actions[bot]
+          search_term: https://pr-${{ github.event.pull_request.number }}.${{ inputs.base-url }}
       - name: Delete comment
-        uses: detomarco/delete-comments@v1
+        uses: sandeshjangam/comment-actions@v1
+        if: ${{ steps.fc.outputs.comment_id != ''}}
         with:
-          comment-id: ${{ steps.fc.outputs.comment-id }}
+          type: delete
+          comment_id: ${{ steps.fc.outputs.comment_id }}
