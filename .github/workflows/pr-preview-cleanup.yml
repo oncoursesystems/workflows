@@ -37,7 +37,7 @@ jobs:
           KUBE_CONFIG_DATA: ${{ secrets.KUBECONFIG }}
         with:
           args: |
-            helm delete ${{ inputs.deployment-name }}-${{ github.event.pull_request.number }} --namespace ${{ inputs.namespace }}
+            helm delete ${{ inputs.deployment-name }}-pr${{ github.event.pull_request.number }} --namespace ${{ inputs.namespace }}
       - name: Find comment
         uses: sandeshjangam/comment-actions@v1
         id: fc
