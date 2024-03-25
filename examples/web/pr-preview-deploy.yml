@@ -10,13 +10,32 @@ env:
 jobs:
   if: ${{ github.event.label.name == env.PREVIEW_LABEL }}
 
+  create-comment:
+    runs-on: linux
+    steps:
+      - name: 🔍 Find comment
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: pull request preview
+      - name: 💬 Create or update comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            Your pull request preview is currently deploying...
+          edit-mode: replace
+
   docker-build:
     uses: oncoursesystems/workflows/.github/workflows/docker-build.yml@main
     secrets: inherit
     with:
       runs-on: linux
 
-  cd:
+  install-chart:
     needs: docker-build
     strategy:
       matrix:
@@ -26,5 +45,30 @@ jobs:
     with:
       runs-on: linux
       deployment-name: oncourse-systems-${{ matrix.env }}
-      base-url: preview.oncoursesystems.com
-      values-yaml: ./github/workflows/pr-preview-values.yaml
+      base-url: ${{ matrix.env }}.oncoursesystems.com
+      values-yaml: ./github/workflows/pr-preview-${{ matrix.env }}-values.yaml
+
+  update-comment:
+    needs: install-chart
+    runs-on: linux
+    steps:
+      - name: 🔍 Find comment
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: pull request preview
+
+      - name: 💬 Create or update comment with preview url
+        uses: peter-evans/comment-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            Your pull request preview is ready for review: 
+            ```text
+            https://pr-${{ github.event.pull_request.number }}.devel.oncoursesystems.com
+            https://pr-${{ github.event.pull_request.number }}.staging.oncoursesystems.com
+            ```
