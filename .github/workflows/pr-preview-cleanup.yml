@@ -38,17 +38,3 @@ jobs:
         with:
           args: |
             helm delete ${{ inputs.deployment-name }}-pr${{ github.event.pull_request.number }} --namespace ${{ inputs.namespace }}
-      - name: Find comment
-        uses: sandeshjangam/comment-actions@v1
-        id: fc
-        with:
-          type: find
-          number: ${{ github.event.number }}
-          author: github-actions[bot]
-          search_term: https://pr-${{ github.event.pull_request.number }}.${{ inputs.base-url }}
-      - name: Delete comment
-        uses: sandeshjangam/comment-actions@v1
-        if: ${{ steps.fc.outputs.comment_id != ''}}
-        with:
-          type: delete
-          comment_id: ${{ steps.fc.outputs.comment_id }}
