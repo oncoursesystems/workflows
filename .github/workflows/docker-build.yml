@@ -64,6 +64,8 @@ jobs:
     steps:
       - name: ⚙️  Setup QEMU
         uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/386
 
       - name: ⚙️  Setup Docker BuildX
         id: buildx
