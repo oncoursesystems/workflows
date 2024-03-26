@@ -15,7 +15,7 @@ on:
       nodejs-version:
         type: string
         required: false
-        default: latest
+        default: 20.x
       nodejs-project-path:
         type: string
         required: false
