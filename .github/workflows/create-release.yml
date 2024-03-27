@@ -5,7 +5,7 @@ on:
     inputs:
       runs-on:
         type: string
-        default: self-hosted
+        default: arc-kubernetes-cluster
       version:
         description: Use to override the default generated version
         required: false
@@ -15,6 +15,9 @@ jobs:
   release:
     runs-on: ${{ inputs.runs-on }}
     steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install GitHub CLI
         uses: alexellis/arkade-get@master
         with:

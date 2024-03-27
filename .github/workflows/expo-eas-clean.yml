@@ -12,7 +12,7 @@ on:
         required: true
       runs-on:
         type: string
-        default: self-hosted
+        default: arc-kubernetes-cluster
 
 jobs:
   eas-clean:
@@ -20,7 +20,7 @@ jobs:
     if: github.event.pull_request.user.login != 'dependabot[bot]'
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: ⚙️ Setup Expo
         uses: expo/expo-github-action@v8
         with:
@@ -28,7 +28,7 @@ jobs:
           packager: npm
           token: ${{ secrets.expo-token }}
       - name: 🏦 Cache dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: node_modules
           key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}

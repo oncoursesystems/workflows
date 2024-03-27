@@ -7,7 +7,7 @@ on:
         description: Defines the type of machine to run the workflow on
         type: string
         required: false
-        default: self-hosted
+        default: arc-kubernetes-cluster
       base-url:
         type: string
         required: true
