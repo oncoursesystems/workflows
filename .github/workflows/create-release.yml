@@ -14,7 +14,6 @@ on:
         type: string
         description: Access token used when creating the release, using GITHUB_TOKEN will not fire any additional workflows like on:release:published
         required: false
-        default: ${{ secrets.CREATE_RELEASE_PAT }}
 
 jobs:
   release:
@@ -37,8 +36,8 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          token: ${{ inputs.token }}
-          name: v${{VERSION}}
-          tag_name: ${{VERSION}}
+          token: ${{ secrets.CREATE_RELEASE_PAT }}
+          name: v${{ env.VERSION }}
+          tag_name: ${{ env.VERSION }}
           generate_release_notes: true
           make_latest: true
