@@ -45,7 +45,7 @@ jobs:
       - name: 🏦 Cache dependencies
         if: steps.test.outputs.files_exists == 'true'
         id: cache-npm
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ inputs.nodejs-project-path }}/node_modules
           key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
