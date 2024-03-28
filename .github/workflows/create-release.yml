@@ -10,6 +10,11 @@ on:
         description: Use to override the default generated version
         required: false
         type: string
+      token:
+        type: string
+        description: Access token used when creating the release, using GITHUB_TOKEN will not fire any additional workflows like on:release:published
+        required: false
+        default: ${{ secrets.CREATE_RELEASE_PAT }}
 
 jobs:
   release:
@@ -17,11 +22,6 @@ jobs:
     steps:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install GitHub CLI
-        uses: alexellis/arkade-get@master
-        with:
-          gh: latest
 
       - name: Generate version number - Windows OS
         if: ${{ runner.os == 'Windows' }}
@@ -35,7 +35,10 @@ jobs:
           echo "VERSION=$(date +"%Y.%m.%d.%H%M")" >> ${GITHUB_ENV}
 
       - name: Create release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "${VERSION}" --title="v${VERSION}" --generate-notes
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ inputs.token }}
+          name: v${{VERSION}}
+          tag_name: ${{VERSION}}
+          generate_release_notes: true
+          make_latest: true
