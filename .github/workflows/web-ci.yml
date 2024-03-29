@@ -38,6 +38,7 @@ jobs:
         uses: andstor/file-existence-action@v3
         with:
           files: "**/package.json"
+          ignore_case: true
 
       - name: ⚙️ Setup NodeJS
         if: steps.test.outputs.files_exists == 'true'
@@ -73,6 +74,7 @@ jobs:
         uses: andstor/file-existence-action@v3
         with:
           files: "**/*.csproj, **/appSettings.json"
+          ignore_case: true
 
       - name: ⚙️ Setup Dotnet
         if: steps.test.outputs.files_exists == 'true'
@@ -97,6 +99,7 @@ jobs:
         uses: andstor/file-existence-action@v3
         with:
           files: "**/*.csproj, **/Web.config"
+          ignore_case: true
 
       - name: ⚙️ Setup MSBuild
         if: steps.test.outputs.files_exists == 'true'
