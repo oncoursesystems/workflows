@@ -6,6 +6,9 @@ on:
       runs-on:
         type: string
         default: arc-kubernetes-cluster
+      sparse-checkout:
+        type: string
+        required: false
       dotnet-version:
         type: string
         default: 8.0.x
@@ -27,6 +30,8 @@ jobs:
     steps:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: ${{ inputs.sparse-checkout }}
 
       - name: 🧪 Test for NodeJS
         id: test
@@ -99,8 +104,8 @@ jobs:
 
       - name: 📦 Restore packages
         if: steps.test.outputs.files_exists == 'true'
-        run: nuget restore ${{ inputs.project-file }}
+        run: nuget restore ${{ inputs.dotnet-project-file }}
 
       - name: 🚀 Dotnet build
         if: steps.test.outputs.files_exists == 'true'
-        run: msbuild.exe ${{ inputs.project-file }} /nologo /nr:false /p:platform="Any CPU" /p:configuration="Release"
+        run: msbuild.exe ${{ inputs.dotnet-project-file }} /nologo /nr:false /p:platform="Any CPU" /p:configuration="Release"
