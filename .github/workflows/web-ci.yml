@@ -24,6 +24,9 @@ on:
         required: false
         default: .
 
+env:
+  DOTNET_INSTALL_DIR: "./.dotnet"
+
 jobs:
   build-nodejs:
     runs-on: ${{ inputs.runs-on }}
