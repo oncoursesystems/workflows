@@ -12,6 +12,10 @@ on:
       dotnet-version:
         type: string
         default: 8.0.x
+      dotnet-project-path:
+        type: string
+        required: false
+        default: .
       dotnet-project-file:
         type: string
         required: false
@@ -87,6 +91,7 @@ jobs:
 
       - name: 🚀 Dotnet build
         if: steps.test.outputs.files_exists == 'true'
+        working-directory: ${{ inputs.dotnet-project-path }}
         run: dotnet build --configuration Release
 
   build-dotnet-framework:
@@ -114,8 +119,10 @@ jobs:
 
       - name: 📦 Restore packages
         if: steps.test.outputs.files_exists == 'true'
+        working-directory: ${{ inputs.dotnet-project-path }}
         run: nuget restore ${{ inputs.dotnet-project-file }}
 
       - name: 🚀 Dotnet build
         if: steps.test.outputs.files_exists == 'true'
+        working-directory: ${{ inputs.dotnet-project-path }}
         run: msbuild.exe ${{ inputs.dotnet-project-file }} /nologo /nr:false /p:platform="Any CPU" /p:configuration="Release"
