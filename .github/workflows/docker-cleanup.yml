@@ -8,7 +8,7 @@ on:
         default: arc-kubernetes-cluster
       package-name:
         type: string
-        required: true
+        default: ${{ github.repository }}
 
 jobs:
   release:
