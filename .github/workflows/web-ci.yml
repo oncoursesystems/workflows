@@ -34,6 +34,7 @@ on:
 
 env:
   DOTNET_INSTALL_DIR: "./.dotnet"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
 
 jobs:
   build-nodejs:
