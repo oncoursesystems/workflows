@@ -19,6 +19,10 @@ on:
       dotnet-project-file:
         type: string
         required: false
+      bun-version:
+        type: string
+        required: false
+        default: 1.x
       nodejs-version:
         type: string
         required: false
@@ -49,30 +53,35 @@ jobs:
 
       - name: ⚙️ Setup NodeJS
         if: steps.test.outputs.files_exists == 'true'
-        uses: actions/setup-node@v4
+        uses: oven-sh/setup-bun@v1
         with:
-          node-version: ${{ inputs.nodejs-version }}
-          cache: "npm"
-          cache-dependency-path: ${{ inputs.nodejs-project-path }}/package-lock.json
+          bun-version: ${{ inputs.bun-version }}
 
-      - name: 🏦 Cache dependencies
-        if: steps.test.outputs.files_exists == 'true'
-        id: cache-npm
-        uses: actions/cache@v3
-        with:
-          path: ${{ inputs.nodejs-project-path }}/node_modules
-          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+      # - name: 🏦 Cache dependencies
+      #   if: steps.test.outputs.files_exists == 'true'
+      #   id: cache-bun
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: ~/.bun/install/cache
+      #     key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-bun-
 
       - name: 📦 Install dependencies
-        if: steps.test.outputs.files_exists == 'true' && steps.cache-npm.outputs.cache-hit != 'true'
+        if: steps.test.outputs.files_exists == 'true' #&& steps.cache-npm.outputs.cache-hit != 'true'
         working-directory: ${{ inputs.nodejs-project-path }}
-        run: npm ci --ignore scripts
+        run: bun install --frozen-lockfile
+
+      - name: 🚀 Bun run
+        if: steps.test.outputs.files_exists == 'true' #&& steps.cache-npm.outputs.cache-hit != 'true'
+        working-directory: ${{ inputs.nodejs-project-path }}
+        run: bunx --bun vite build
 
   build-dotnet-core:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           sparse-checkout: ${{ inputs.sparse-checkout }}
 
@@ -92,13 +101,13 @@ jobs:
       - name: 🚀 Dotnet build
         if: steps.test.outputs.files_exists == 'true'
         working-directory: ${{ inputs.dotnet-project-path }}
-        run: dotnet build --configuration Release
+        run: dotnet build --nologo --configuration Release
 
   build-dotnet-framework:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           sparse-checkout: ${{ inputs.sparse-checkout }}
 
