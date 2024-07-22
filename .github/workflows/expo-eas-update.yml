@@ -14,7 +14,7 @@ on:
         type: string
       runs-on:
         type: string
-        default: arc-kubernetes-cluster
+        default: self-hosted
 
 jobs:
   eas-update:

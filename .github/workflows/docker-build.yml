@@ -28,7 +28,7 @@ on:
       runs-on:
         description: Defines the type of machine to run the workflow on
         type: string
-        default: arc-kubernetes-cluster
+        default: self-hosted
       push:
         description: Enables pushing of the image to the container registry
         type: boolean

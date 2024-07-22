@@ -5,7 +5,7 @@ on:
     inputs:
       runs-on:
         type: string
-        default: arc-kubernetes-cluster
+        default: self-hosted
       version:
         description: Use to override the default generated version
         required: false
