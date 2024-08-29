@@ -22,7 +22,7 @@ on:
       bun-version:
         type: string
         required: false
-        default: 1.x
+        default: latest
       nodejs-version:
         type: string
         required: false
