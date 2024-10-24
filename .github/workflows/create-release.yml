@@ -26,7 +26,7 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         shell: powershell
         run: |
-          echo "VERSION=$((Get-Date).ToString("yyyy.MM.dd.HHmm"))" >> ${GITHUB_ENV}
+          echo "VERSION=$((Get-Date).ToString("yyyy.MM.dd.HHmm"))" >> $env:GITHUB_ENV
 
       - name: Generate version number - Linux/Mac OS
         if: ${{ runner.os != 'Windows' }}
