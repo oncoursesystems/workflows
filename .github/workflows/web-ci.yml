@@ -33,8 +33,9 @@ on:
         default: .
 
 env:
-  DOTNET_INSTALL_DIR: "./.dotnet"
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_INSTALL_DIR: "./.dotnet" # Needed otherwise dotnet setup will fail due to permissions on the k8s runner
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1 # Suppresses the "Welcome to .NET!" message
+  CI: 1 # Disables Husky and prevents npm install running during the dotnet build
 
 jobs:
   build-nodejs:
