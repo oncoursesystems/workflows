@@ -91,7 +91,7 @@ jobs:
           flavor: ${{ inputs.flavor-rules }}
 
       - name: 🚀 Docker Build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           platforms: ${{ inputs.platforms }}
           context: ${{ inputs.context }}
