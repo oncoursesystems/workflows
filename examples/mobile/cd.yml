@@ -1,7 +1,0 @@
-on:
-  release:
-    types: [published]
-jobs:
-  cd:
-    uses: oncoursesystems/workflows/.github/workflows/mobile-cd@main
-    secrets: inherit
