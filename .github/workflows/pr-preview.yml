@@ -26,7 +26,7 @@ on:
       chart-repository:
         type: string
         description: "URL of the Helm chart repository"
-        default: https://bjw-s.github.io/helm-charts
+        default: https://bjw-s-labs.github.io/helm-charts
       chart-name:
         type: string
         description: "Name of the Helm chart to deploy"
@@ -80,7 +80,7 @@ jobs:
     needs: docker-build
     strategy:
       matrix:
-        env: ${{ fromJson(inputs.environments) }} 
+        env: ${{ fromJson(inputs.environments) }}
     steps:
       - name: ⚙ Define job variables
         id: pr_info
@@ -176,7 +176,7 @@ jobs:
 
       - name: 🗑️ Remove Docker image from GHCR
         if: inputs.delete_image_on_close == true
-        uses: chipkent/action-cleanup-package@v1.0.1 
+        uses: chipkent/action-cleanup-package@v1.0.1
         with:
           package-name: ${{ steps.pr_info.outputs.REPO_NAME }}
           tag: ${{ steps.pr_info.outputs.IMAGE_TAG }}
