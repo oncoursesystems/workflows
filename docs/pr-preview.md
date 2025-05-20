@@ -29,9 +29,14 @@ This depends on the following actions:
 
 **Default** `pr-preview`
 
-### `values-yaml`
+### `environments`
 
-**Required** Path to the values.yaml file to apply custom values to the Helm chart
+**Optional** List of environments to deploy to (devel, staging, preview), format must be an array of strings
+
+**Default** `"['devel', 'staging', 'preview']"`
+### `env-values-path`
+
+**Required** Path to the directory containing the environment yaml files to apply custom values to the Helm chart
 
 ### `chart-repository`
 
@@ -55,7 +60,7 @@ This depends on the following actions:
 
 **Optional** Whether to delete the Docker image from registry when the PR is closed or merged
 
-**Default** `false`
+**Default** `true`
 
 ## Secrets
 
@@ -77,7 +82,7 @@ jobs:
     uses: oncoursesystems/workflows/.github/workflows/pr-preview.yml@main
     with:
       base-url: mydomain.com
-      values-yaml: ./k8s/values.yaml
+      env-values-path: ./k8s/values/
     secrets:
       KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
 ```

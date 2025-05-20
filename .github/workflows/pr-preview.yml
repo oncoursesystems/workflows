@@ -15,9 +15,13 @@ on:
         type: string
         description: "Kubernetes namespace where the preview image will be deployed"
         default: pr-preview
-      values-yaml:
+      environments:
         type: string
-        description: "Path to the values.yaml file to apply custom values to the Helm chart"
+        description: "List of environments to deploy to (devel, staging, preview), format must be an array of strings"
+        default: "['devel', 'staging', 'preview']"
+      env-values-path:
+        type: string
+        description: "Path to the directory containing the environment yaml files to apply custom values to the Helm chart"
         required: true
       chart-repository:
         type: string
@@ -34,7 +38,7 @@ on:
       delete_image_on_close:
         type: boolean
         description: "Whether to delete the Docker image from registry when the PR is closed or merged"
-        default: false
+        default: true
 
     secrets:
       KUBE_CONFIG:
@@ -76,7 +80,7 @@ jobs:
     needs: docker-build
     strategy:
       matrix:
-        env: [devel, staging, preview]
+        env: ${{ fromJson(inputs.environments) }} 
     steps:
       - name: ⚙ Define job variables
         id: pr_info
@@ -91,7 +95,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           sparse-checkout: |
-            ${{ inputs.values-yaml }}
+            ${{ inputs.env-values-path }}/${{ matrix.env }}.yaml
           sparse-checkout-cone-mode: false
 
       - name: Install Helm chart
@@ -107,7 +111,7 @@ jobs:
               --create-namespace \
               --version ${{ inputs.chart-version }} \
               --wait \
-              --values ${{ inputs.values-yaml }} \
+              --values ${{ inputs.env-values-path }}/${{ matrix.env }}.yaml \
               --set controllers.main.containers.main.image.tag=pr-${{ github.event.pull_request.number }} \
               --set ingress.main.hosts[0].host=pr-${{ github.event.pull_request.number }}.${{ matrix.env }}.${{ inputs.base-url }} \
               --set ingress.main.tls[0].hosts[0]=pr-${{ github.event.pull_request.number }}.${{ matrix.env }}.${{ inputs.base-url }}
