@@ -1,0 +1,197 @@
+name: pr-preview
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        description: "The type of runner to use for the job"
+        default: self-hosted
+      base-url:
+        type: string
+        description: "Base URL for the preview environment (https://pr-<pr_number>.<env>.<base-url>)"
+        required: true
+      namespace:
+        type: string
+        description: "Kubernetes namespace where the preview image will be deployed"
+        default: pr-preview
+      values-yaml:
+        type: string
+        description: "Path to the values.yaml file to apply custom values to the Helm chart"
+        required: true
+      chart-repository:
+        type: string
+        description: "URL of the Helm chart repository"
+        default: https://bjw-s.github.io/helm-charts
+      chart-name:
+        type: string
+        description: "Name of the Helm chart to deploy"
+        default: app-template
+      chart-version:
+        type: string
+        description: "Version of the Helm chart to deploy"
+        default: 3.0.4
+      delete_image_on_close:
+        type: boolean
+        description: "Whether to delete the Docker image from registry when the PR is closed or merged"
+        default: false
+
+    secrets:
+      KUBE_CONFIG:
+        description: "Base64 encoded Kubeconfig data for the target Kubernetes cluster"
+        required: true
+
+jobs:
+  create-comment:
+    if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened')
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: 🔍 Find PR preview comment
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: pull request preview
+
+      - name: 🗨️ Create PR preview comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          reactions: eyes
+          body: |
+            :warning: Your pull request preview is being deployed...
+
+  docker-build:
+    needs: create-comment
+    uses: oncoursesystems/workflows/.github/workflows/docker-build.yml@main
+    secrets: inherit
+    with:
+      runs-on: ${{ inputs.runs-on }}
+
+  deploy-preview:
+    runs-on: ${{ inputs.runs-on }}
+    needs: docker-build
+    strategy:
+      matrix:
+        env: [devel, staging, preview]
+    steps:
+      - name: ⚙ Define job variables
+        id: pr_info
+        run: |
+          PR_NUM=${{ github.event.pull_requst.number }}
+          CALLING_REPO=${{ github.event.repository.full_name }}
+          REPO_NAME="${CALLING_REPO#*/}"
+          echo "IMAGE_TAG=preview-${PR_NUM}" >> $GITHUB_OUTPUT
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_OUTPUT
+
+      - name: Checkout yaml file
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ inputs.values-yaml }}
+          sparse-checkout-cone-mode: false
+
+      - name: Install Helm chart
+        uses: wahyd4/kubectl-helm-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBECONFIG }}
+        with:
+          args: |
+            helm repo add pr-preview ${{ inputs.chart-repository }}
+            helm upgrade ${{ steps.pr_info.outputs.REPO_NAME }}-pr${{ github.event.pull_request.number }} pr-preview/${{ inputs.chart-name }} \
+              --install \
+              --namespace ${{ inputs.namespace }} \
+              --create-namespace \
+              --version ${{ inputs.chart-version }} \
+              --wait \
+              --values ${{ inputs.values-yaml }} \
+              --set controllers.main.containers.main.image.tag=pr-${{ github.event.pull_request.number }} \
+              --set ingress.main.hosts[0].host=pr-${{ github.event.pull_request.number }}.${{ matrix.env }}.${{ inputs.base-url }} \
+              --set ingress.main.tls[0].hosts[0]=pr-${{ github.event.pull_request.number }}.${{ matrix.env }}.${{ inputs.base-url }}
+
+  update-comment:
+    runs-on: ${{ inputs.runs-on }}
+    needs: deploy-preview
+    steps:
+      - name: 🔍 Find comment
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: pull request preview
+
+      - name: 💬 Create or update comment with preview url
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          reactions: rocket
+          body: |
+            :sparkles: **Your pull request preview is ready!** :sparkles:
+
+            | Environment | Url |
+            | --- | --- |
+            | Devel  | https://pr-${{ github.event.pull_request.number }}.devel.${{ inputs.base-url }} |
+            | Staging | https://pr-${{ github.event.pull_request.number }}.staging.${{ inputs.base-url }} |
+            | Production | https://pr-${{ github.event.pull_request.number }}.preview.${{ inputs.base-url }} |
+
+            > [!NOTE]
+            > Specific environments may not work if dependant database code has not yet been deployed.  Production access
+            > requires to be on the company VPN
+
+            *Merging or closing this PR will uninstall the deployment automatically*
+
+  cleanup-preview:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: ⚙ Define job variables
+        id: pr_info
+        run: |
+          PR_NUM=${{ github.event.pull_requst.number }}
+          CALLING_REPO=${{ github.event.repository.full_name }}
+          REPO_NAME="${CALLING_REPO#*/}"
+          echo "IMAGE_TAG=preview-${PR_NUM}" >> $GITHUB_OUTPUT
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_OUTPUT
+
+      - name: 🗑️ Remove Kubernetes deployment
+        uses: wahyd4/kubectl-helm-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG }}
+        with:
+          args: |
+            helm uninstall ${{ steps.pr_info.outputs.REPO_NAME }}-${{ steps.pr_info.outputs.IMAGE_TAG }} \
+              --namespace ${{ inputs.namespace }}
+              --ignore-not-found
+              --wait
+
+      - name: 🗑️ Remove Docker image from GHCR
+        if: inputs.delete_image_on_close == true
+        uses: chipkent/action-cleanup-package@v1.0.1 
+        with:
+          package-name: ${{ steps.pr_info.outputs.REPO_NAME }}
+          tag: ${{ steps.pr_info.outputs.IMAGE_TAG }}
+          github-token: ${{ secrets.GH_TOKEN }}
+
+      - name: 🔍 Find PR preview comment
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: pull request preview
+
+      - name: 🗨️ Update PR preview comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          reactions: rocket
+          body: |
+            :wastebasket: The pull request preview has been successfully destroyed.

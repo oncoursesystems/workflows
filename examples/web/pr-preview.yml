@@ -1,0 +1,20 @@
+name: pr-preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, closed]
+
+jobs:
+  manage-preview-environment:
+    uses: oncoursesystems/workflows/.github/workflows/pr-preview.yml@main
+    with:
+      runs-on: linux
+      deployment-name: your-repo-name 
+      base-url: yourdomain.com
+      values-yaml: ./github/examples/errata/pr-preview-values.yaml
+    secrets:
+      KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
