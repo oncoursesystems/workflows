@@ -14,7 +14,3 @@ jobs:
     secrets: inherit
     with:
       version: ${{ inputs.version }}
-  cd:
-    needs: create-release
-    uses: oncoursesystems/workflows/.github/workflows/web-cd.yml@main
-    secrets: inherit
