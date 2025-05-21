@@ -93,6 +93,10 @@ jobs:
 
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ inputs.env-values-path }}/${{ matrix.env }}.yaml
+          sparse-checkout-cone-mode: false
 
       - name: 🪖 Install Helm chart
         uses: wahyd4/kubectl-helm-action@master
@@ -107,7 +111,7 @@ jobs:
               --create-namespace \
               --version ${{ inputs.chart-version }} \
               --wait \
-              --values ${{ inputs.env-values-path }}/${{ matrix.env }}.yaml \
+              --values ${{ github.workspace }}/${{ inputs.env-values-path }}/${{ matrix.env }}.yaml \
               --set controllers.main.containers.main.image.tag=pr-${{ github.event.pull_request.number }} \
               --set ingress.main.hosts[0].host=pr-${{ github.event.pull_request.number }}.${{ matrix.env }}.${{ inputs.base-url }} \
               --set ingress.main.tls[0].hosts[0]=pr-${{ github.event.pull_request.number }}.${{ matrix.env }}.${{ inputs.base-url }}
