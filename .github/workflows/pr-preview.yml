@@ -91,14 +91,10 @@ jobs:
           echo "IMAGE_TAG=preview-${PR_NUM}" >> $GITHUB_OUTPUT
           echo "REPO_NAME=$REPO_NAME" >> $GITHUB_OUTPUT
 
-      - name: Checkout yaml file
+      - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            ${{ inputs.env-values-path }}/${{ matrix.env }}.yaml
-          sparse-checkout-cone-mode: false
 
-      - name: Install Helm chart
+      - name: 🪖 Install Helm chart
         uses: wahyd4/kubectl-helm-action@master
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG }}
