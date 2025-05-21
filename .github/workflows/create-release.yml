@@ -22,24 +22,22 @@ jobs:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set version
-        id: set-version
+      - name: Generate version number - Windows OS
+        if: ${{ runner.os == 'Windows' }}
+        shell: powershell
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            if [ "${{ runner.os }}" == "Windows" ]; then
-              echo "VERSION=$((Get-Date).ToString('yyyy.MM.dd.HHmm'))" >> $env:GITHUB_OUTPUT
-            else
-              echo "VERSION=$(date +"%Y.%m.%d.%H%M")" >> $GITHUB_OUTPUT
-            fi
-          fi
+          echo "VERSION=$((Get-Date).ToString("yyyy.MM.dd.HHmm"))" >> $env:GITHUB_ENV
+
+      - name: Generate version number - Linux/Mac OS
+        if: ${{ runner.os != 'Windows' }}
+        run: |
+          echo "VERSION=$(date +"%Y.%m.%d.%H%M")" >> ${GITHUB_ENV}
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.CREATE_RELEASE_PAT }}
-          name: v${{ steps.set-version.outputs.VERSION }}
-          tag_name: v${{ steps.set-version.outputs.VERSION }}
+          name: v${{ env.VERSION }}
+          tag_name: v${{ env.VERSION }}
           generate_release_notes: true
           make_latest: true
