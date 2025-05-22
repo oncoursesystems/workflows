@@ -38,6 +38,6 @@ jobs:
         with:
           token: ${{ secrets.CREATE_RELEASE_PAT }}
           name: v${{ env.VERSION }}
-          tag_name: v${{ env.VERSION }}
+          tag_name: ${{ env.VERSION }}
           generate_release_notes: true
           make_latest: true
