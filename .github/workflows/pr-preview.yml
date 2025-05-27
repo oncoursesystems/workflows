@@ -93,10 +93,6 @@ jobs:
 
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            ${{ inputs.env-values-path }}/${{ matrix.env }}.yaml
-          sparse-checkout-cone-mode: false
 
       - name: 🪖 Install Helm chart
         uses: wahyd4/kubectl-helm-action@master
