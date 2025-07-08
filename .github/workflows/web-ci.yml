@@ -75,10 +75,10 @@ jobs:
         working-directory: ${{ inputs.nodejs-project-path }}
         run: bun install --frozen-lockfile
 
-      - name: 🚀 Bun run
+      - name: 🚀 Bun run build
         if: steps.test.outputs.files_exists == 'true' #&& steps.cache-npm.outputs.cache-hit != 'true'
         working-directory: ${{ inputs.nodejs-project-path }}
-        run: bunx --bun vite build
+        run: bun run build
 
   build-dotnet-core:
     runs-on: ${{ inputs.runs-on }}
