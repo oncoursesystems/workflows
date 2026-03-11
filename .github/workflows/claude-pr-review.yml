@@ -1,0 +1,90 @@
+name: claude-pr-review
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        default: k8s-linux
+      anthropic-model:
+        type: string
+        description: "Claude model to use (e.g., claude-opus-4-5, claude-sonnet-4-6)"
+        required: false
+        default: "claude-sonnet-4-6"
+      custom-prompt:
+        type: string
+        description: "Additional custom instructions for the review"
+        required: false
+        default: ""
+      allowed-tools:
+        type: string
+        description: "Tools allowed for Claude to use"
+        required: false
+        default: "Bash(gh pr comment:*),Bash(gh pr review:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
+    secrets:
+      CLAUDE_TOKEN:
+        description: "Claude Code OAuth token"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude PR Review
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_MODEL: ${{ inputs.anthropic-model }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_TOKEN }}
+          use_sticky_comment: true
+          track_progress: true
+          plugin_marketplaces: |
+            https://github.com/anthropics/claude-code.git
+          plugins: |
+            pr-review-toolkit@claude-code-plugins
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Perform a comprehensive code review with the following focus areas:
+
+            1. **Code Quality**
+              - Clean code principles and best practices
+              - Proper error handling and edge cases
+              - Code readability and maintainability
+
+            2. **Security**
+              - Check for potential security vulnerabilities
+              - Validate input sanitization
+              - Review authentication/authorization logic
+
+            3. **Performance**
+              - Identify potential performance bottlenecks
+              - Review database queries for efficiency
+              - Check for memory leaks or resource issues
+
+            Use the pr-review-toolkit agents to check:
+            - Code quality and style (code-reviewer)
+            - Test coverage (pr-test-analyzer)
+            - Error handling (silent-failure-hunter)
+            - Type design (type-design-analyzer)
+            - Comment accuracy (comment-analyzer)
+            - Code complexity (code-simplifier)
+
+            ${{ inputs.custom-prompt }}
+
+            Post review results as a PR comment using `gh pr comment`.
+            Use `gh pr review` for inline comments on specific code lines.
+          claude_args: |
+            --allowedTools "${{ inputs.allowed-tools }}"

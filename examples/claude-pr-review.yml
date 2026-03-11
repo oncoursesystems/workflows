@@ -1,0 +1,11 @@
+name: claude-pr-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    uses: oncoursesystems/workflows/.github/workflows/claude-pr-review.yml@main
+    secrets:
+      CLAUDE_TOKEN: ${{ secrets.CLAUDE_TOKEN }}
