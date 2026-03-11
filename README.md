@@ -15,8 +15,9 @@ The web workflow is designed to build and publish Docker images to a registry an
 
 ### Actions
 
+- [claude-pr-review](.github/workflows/claude-pr-review.yml) ([docs](docs/claude-pr-review.md)) - Automated AI code review for pull requests using Claude
 - [create-release](.github/workflows/create-release.yml) ([docs](docs/create-release.md)) - Creates a GitHub release and publishes a Docker image with the current timestamp as the tag
-- [docker-build](.github/workflows/docker-build.yml) ([docs](docs/docker-build.md)) - builds a Docker image and pushes it to a registry
+- [docker-build](.github/workflows/docker-build.yml) ([docs](docs/docker-build.md)) - Builds a Docker image and pushes it to a registry
 - [pr-preview](.github/workflows/pr-preview.yml) ([docs](docs/pr-preview.md)) - Deploys a PR preview build to a kubernetes cluster
 - [web-cd](.github/workflows/web-cd.yml) ([docs](docs/web-cd.md)) - Manages publishing a web application release
 - [web-ci](.github/workflows/web-ci.yml) ([docs](docs/web-ci.md)) - Manages building of a web application during the development lifecycle
