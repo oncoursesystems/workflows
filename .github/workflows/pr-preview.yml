@@ -92,7 +92,7 @@ jobs:
           echo "REPO_NAME=$REPO_NAME" >> $GITHUB_OUTPUT
 
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: 🪖 Install Helm chart
         uses: wahyd4/kubectl-helm-action@master
