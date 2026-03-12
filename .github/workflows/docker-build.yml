@@ -84,7 +84,7 @@ jobs:
 
       - name: 🏷️ Extract metadata (tags, labels)
         id: metadata
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ inputs.registry }}/${{ inputs.image-name }}
           tags: ${{ inputs.tag-rules }}
