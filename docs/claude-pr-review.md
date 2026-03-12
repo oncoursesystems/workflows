@@ -34,6 +34,12 @@ This depends on the following actions:
 
 **Default** `Bash(gh pr comment:*),Bash(gh pr review:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob`
 
+### `bun-path`
+
+**Optional** Path to pre-installed Bun runtime (leave blank to let Claude install Bun)
+
+**Default** `/home/runner/.bun/bin/bun`
+
 ## Secrets
 
 ### `CLAUDE_TOKEN`
@@ -48,13 +54,22 @@ name: Claude PR Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
 
 jobs:
   review:
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@claude'))
     uses: oncoursesystems/workflows/.github/workflows/claude-pr-review.yml@main
     secrets:
       CLAUDE_TOKEN: ${{ secrets.CLAUDE_TOKEN }}
 ```
+
+This triggers on PR events or when someone mentions `@claude` in a PR comment.
 
 ### With Custom Options
 
