@@ -3,9 +3,16 @@ name: claude-pr-review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
 
 jobs:
   review:
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@claude'))
     uses: oncoursesystems/workflows/.github/workflows/claude-pr-review.yml@main
     secrets:
       CLAUDE_TOKEN: ${{ secrets.CLAUDE_TOKEN }}

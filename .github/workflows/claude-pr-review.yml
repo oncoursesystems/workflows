@@ -21,6 +21,11 @@ on:
         description: "Tools allowed for Claude to use"
         required: false
         default: "Bash(gh pr comment:*),Bash(gh pr review:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
+      bun-path:
+        type: string
+        description: "Path to pre-installed Bun runtime (leave blank to let Claude install Bun)"
+        required: false
+        default: /home/runner/.bun/bin/bun
     secrets:
       CLAUDE_TOKEN:
         description: "Claude Code OAuth token"
@@ -47,6 +52,7 @@ jobs:
           ANTHROPIC_MODEL: ${{ inputs.anthropic-model }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_TOKEN }}
+          path_to_bun_executable: ${{ inputs.bun-path }}
           use_sticky_comment: true
           track_progress: true
           plugin_marketplaces: |
