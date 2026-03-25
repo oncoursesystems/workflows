@@ -1,0 +1,563 @@
+name: e2e-testing
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        default: k8s-linux
+      test-dir:
+        type: string
+        description: "Directory containing test markdown files"
+        required: false
+        default: "./tests"
+      base-url:
+        type: string
+        description: "Base URL for the application under test"
+        required: true
+      filter:
+        type: string
+        description: "Filter tests by file name glob pattern (e.g., 'login*', '*auth*.test.md')"
+        required: false
+        default: ""
+      tags:
+        type: string
+        description: "Filter tests by tags (comma-separated). Test must have ALL specified tags to run."
+        required: false
+        default: ""
+      timeout:
+        type: number
+        description: "Test timeout in milliseconds"
+        required: false
+        default: 120000
+      screenshot-mode:
+        type: string
+        description: "Screenshot capture mode: always, on-failure, never"
+        required: false
+        default: "on-failure"
+      fail-fast:
+        type: boolean
+        description: "Stop on first test failure"
+        required: false
+        default: false
+      secrets-json:
+        type: string
+        description: "JSON object mapping secret names to values for credential interpolation"
+        required: false
+        default: "{}"
+      model:
+        type: string
+        description: "Claude model to use"
+        required: false
+        default: "sonnet"
+      pr-number:
+        type: number
+        description: "Pull request number (for PR comments)"
+        required: false
+      max-turns:
+        type: number
+        description: "Maximum number of turns for the Claude model"
+        required: false
+        default: 200
+    outputs:
+      result:
+        description: "Overall test result: passed or failed"
+        value: ${{ steps.parse-results.outputs.result }}
+      passed:
+        description: "Number of passed tests"
+        value: ${{ steps.parse-results.outputs.passed }}
+      failed:
+        description: "Number of failed tests"
+        value: ${{ steps.parse-results.outputs.failed }}
+      test_count:
+        description: "Number of test files detected"
+        value: ${{ steps.prepare.outputs.test_count }}
+    secrets:
+      CLAUDE_TOKEN:
+        description: "Claude Code OAuth token"
+        required: true
+
+jobs:
+  runtest:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install agent-browser
+        shell: bash
+        run: |
+          npm install -g agent-browser playwright
+          npx playwright install --with-deps chromium
+
+      - name: Prepare test context
+        id: prepare
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAGS: ${{ inputs.tags }}
+          INPUT_FILTER: ${{ inputs.filter }}
+          PR_NUMBER: ${{ inputs.pr-number || github.event.pull_request.number || '' }}
+        run: |
+          # Helper function to extract tags from frontmatter (supports both formats)
+          # Block style:  tags:\n  - smoke\n  - critical
+          # Flow style:   tags: [smoke, critical]
+          get_file_tags() {
+            local file="$1"
+            local frontmatter
+            frontmatter=$(sed -n '/^---$/,/^---$/p' "$file")
+
+            # Check for flow style: tags: [item1, item2]
+            local flow_tags
+            flow_tags=$(echo "$frontmatter" | grep -E '^tags:\s*\[' | sed 's/^tags:\s*\[//' | sed 's/\]\s*$//' | tr ',' '\n' | tr -d ' ')
+
+            if [ -n "$flow_tags" ]; then
+              echo "$flow_tags"
+            else
+              # Block style: tags:\n  - item
+              echo "$frontmatter" | \
+                sed -n '/^tags:/,/^[a-zA-Z]/p' | \
+                grep -E '^\s*-\s' | \
+                sed 's/^\s*-\s*//' | \
+                tr -d ' '
+            fi
+          }
+
+          echo "::group::Test Discovery"
+          echo "📁 Test directory: ${{ inputs.test-dir }}"
+          echo "🔍 Searching for *.test.md and *.e2e.md files..."
+          echo ""
+
+          # Check if directory exists
+          if [ ! -d "${{ inputs.test-dir }}" ]; then
+            echo "::error::Test directory does not exist: ${{ inputs.test-dir }}"
+            exit 1
+          fi
+
+          # Find all test files (using -type f to ensure only files)
+          ALL_TEST_FILES=$(find "${{ inputs.test-dir }}" -type f \( -name "*.test.md" -o -name "*.e2e.md" \) 2>/dev/null | sort)
+
+          if [ -z "$ALL_TEST_FILES" ]; then
+            echo "::error::No test files found in ${{ inputs.test-dir }}"
+            exit 1
+          fi
+
+          echo "📂 All test files in directory:"
+          echo "$ALL_TEST_FILES"
+          echo ""
+
+          # Initialize
+          FILTERED_FILES=""
+          FILTER_REASON=""
+          PR_CHANGED_FILES=""
+          TAG_MATCHED_FILES=""
+
+          # Helper: filter files by tags (ALL must match)
+          filter_by_tags() {
+            local input_files="$1"
+            local result=""
+            IFS=',' read -ra REQUIRED_TAGS <<< "$INPUT_TAGS"
+
+            while IFS= read -r test_file; do
+              [ -z "$test_file" ] && continue
+
+              FILE_TAGS=$(get_file_tags "$test_file")
+
+              # Check if ALL required tags are present
+              all_match=true
+              for req_tag in "${REQUIRED_TAGS[@]}"; do
+                req_tag=$(echo "$req_tag" | tr -d ' ')
+                if ! echo "$FILE_TAGS" | grep -qx "$req_tag"; then
+                  all_match=false
+                  break
+                fi
+              done
+
+              if [ "$all_match" = true ]; then
+                result="${result}${test_file}"$'\n'
+              fi
+            done <<< "$input_files"
+
+            echo "$result" | sed '/^$/d'
+          }
+
+          # --- PR Changed Files ---
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "0" ]; then
+            echo "🔀 PR #$PR_NUMBER detected"
+
+            # Get list of changed files in the PR
+            CHANGED_FILES=$(gh pr diff "$PR_NUMBER" --name-only 2>/dev/null || echo "")
+
+            if [ -n "$CHANGED_FILES" ]; then
+              echo "📝 Changed files in PR:"
+              echo "$CHANGED_FILES" | head -20
+              echo ""
+
+              # Filter to only test files that were changed
+              while IFS= read -r test_file; do
+                # Normalize path for comparison (remove leading ./)
+                normalized_test=$(echo "$test_file" | sed 's|^\./||')
+                if echo "$CHANGED_FILES" | grep -qF "$normalized_test"; then
+                  PR_CHANGED_FILES="${PR_CHANGED_FILES}${test_file}"$'\n'
+                fi
+              done <<< "$ALL_TEST_FILES"
+
+              PR_CHANGED_FILES=$(echo "$PR_CHANGED_FILES" | sed '/^$/d')
+
+              if [ -n "$PR_CHANGED_FILES" ]; then
+                echo "✅ Changed test files: $(echo "$PR_CHANGED_FILES" | grep -c . || echo 0)"
+              else
+                echo "ℹ️ No test files were changed in this PR"
+              fi
+            else
+              echo "⚠️ Could not fetch PR diff"
+            fi
+          fi
+
+          # --- Tag Matched Files ---
+          if [ -n "$INPUT_TAGS" ]; then
+            echo "🏷️ Tag filter: $INPUT_TAGS (ALL must match)"
+            TAG_MATCHED_FILES=$(filter_by_tags "$ALL_TEST_FILES")
+
+            if [ -n "$TAG_MATCHED_FILES" ]; then
+              echo "✅ Tag-matched test files: $(echo "$TAG_MATCHED_FILES" | grep -c . || echo 0)"
+            else
+              echo "ℹ️ No test files match tags: $INPUT_TAGS"
+            fi
+          fi
+
+          # --- Combine Results ---
+          # PR + Tags: UNION (changed files OR tag-matched files)
+          # PR only: just changed files
+          # Tags only: just tag-matched files
+          # Neither: all files
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "0" ] && [ -n "$INPUT_TAGS" ]; then
+            # Union of PR changes and tag matches
+            FILTERED_FILES=$(printf "%s\n%s" "$PR_CHANGED_FILES" "$TAG_MATCHED_FILES" | sed '/^$/d' | sort -u)
+            FILTER_REASON="changed in PR #$PR_NUMBER OR tags: $INPUT_TAGS"
+          elif [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "0" ]; then
+            # PR only
+            FILTERED_FILES="$PR_CHANGED_FILES"
+            FILTER_REASON="changed in PR #$PR_NUMBER"
+          elif [ -n "$INPUT_TAGS" ]; then
+            # Tags only
+            FILTERED_FILES="$TAG_MATCHED_FILES"
+            FILTER_REASON="tags: $INPUT_TAGS"
+          else
+            # No filters
+            FILTERED_FILES="$ALL_TEST_FILES"
+          fi
+
+          # Check if we have any files after PR/tag filtering
+          if [ -z "$FILTERED_FILES" ]; then
+            echo "ℹ️ No test files to run after filtering"
+            echo "test_count=0" >> $GITHUB_OUTPUT
+            echo "::endgroup::"
+            echo "## 🧪 Test Discovery" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**No test files to run** (filter: $FILTER_REASON)" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          # --- Name/Glob Filter ---
+          if [ -n "$INPUT_FILTER" ]; then
+            echo "📝 Name filter: $INPUT_FILTER"
+
+            NAME_FILTERED=""
+            while IFS= read -r test_file; do
+              [ -z "$test_file" ] && continue
+              filename=$(basename "$test_file")
+
+              # Use bash pattern matching for glob support
+              if [[ "$filename" == $INPUT_FILTER ]] || [[ "$test_file" == $INPUT_FILTER ]]; then
+                NAME_FILTERED="${NAME_FILTERED}${test_file}"$'\n'
+              fi
+            done <<< "$FILTERED_FILES"
+
+            FILTERED_FILES=$(echo "$NAME_FILTERED" | sed '/^$/d')
+
+            if [ -n "$FILTER_REASON" ]; then
+              FILTER_REASON="$FILTER_REASON + filter: $INPUT_FILTER"
+            else
+              FILTER_REASON="filter: $INPUT_FILTER"
+            fi
+
+            if [ -z "$FILTERED_FILES" ]; then
+              echo "::error::No test files match the filter pattern: $INPUT_FILTER"
+              exit 1
+            fi
+          fi
+
+          # Final filtered list
+          TEST_FILES="$FILTERED_FILES"
+          TEST_COUNT=$(echo "$TEST_FILES" | grep -c . || echo "0")
+
+          echo ""
+          if [ -n "$FILTER_REASON" ]; then
+            echo "🎯 Filter applied: $FILTER_REASON"
+          fi
+          echo "✅ Found $TEST_COUNT test file(s) to run:"
+          echo "----------------------------------------"
+          echo "$TEST_FILES" | while read -r file; do
+            [ -z "$file" ] && continue
+            if [ -f "$file" ]; then
+              NAME=$(grep -m1 "^name:" "$file" 2>/dev/null | sed 's/name: *//' || basename "$file")
+              TAGS=$(get_file_tags "$file" | tr '\n' ',' | sed 's/,$//')
+              echo "  📄 $file"
+              echo "     Name: $NAME"
+              [ -n "$TAGS" ] && echo "     Tags: $TAGS"
+            fi
+          done
+          echo "----------------------------------------"
+          echo ""
+
+          # Store test file list
+          echo "$TEST_FILES" > /tmp/test-files.txt
+
+          echo "test_count=$TEST_COUNT" >> $GITHUB_OUTPUT
+          echo "::endgroup::"
+
+          # Output to step summary
+          echo "## 🧪 Test Discovery" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Directory:** \`${{ inputs.test-dir }}\`" >> $GITHUB_STEP_SUMMARY
+          [ -n "$FILTER_REASON" ] && echo "**Filter:** $FILTER_REASON" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tests to Run:** $TEST_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Name | Tags |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "$TEST_FILES" | while read -r file; do
+            [ -z "$file" ] && continue
+            NAME=$(grep -m1 "^name:" "$file" 2>/dev/null | sed 's/name: *//' || basename "$file")
+            TAGS=$(get_file_tags "$file" | tr '\n' ',' | sed 's/,$//')
+            echo "| \`$(basename "$file")\` | $NAME | $TAGS |" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run Agentic UI Tests
+        id: run-tests
+        if: steps.prepare.outputs.test_count != '0'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: |
+            --allowedTools Bash,Read,Write,Bash(gh pr:*)
+            --max-turns ${{ inputs.max-turns }}
+            --model ${{ inputs.model }}
+          prompt: |
+            You are an E2E test runner. Execute the following E2E tests using agent-browser CLI.
+
+            ## Configuration
+            - Base URL: ${{ inputs.base-url }}
+            - Test Directory: ${{ inputs.test-dir }}
+            - Screenshot Mode: ${{ inputs.screenshot-mode }}
+            - Timeout: ${{ inputs.timeout }}ms
+            - Fail Fast: ${{ inputs.fail-fast }}
+            - PR Number: ${{ inputs.pr-number || github.event.pull_request.number || 'N/A' }}
+
+            ## Secrets (use these exact values, NEVER log them)
+            ${{ inputs.secrets-json }}
+
+            ## Instructions
+
+            1. **Read each test file** from the test directory
+            2. **For each test**, execute the steps using agent-browser commands below
+            3. **For steps marked with `**Assert**:`**, verify the condition and record pass/fail
+
+            ## agent-browser Commands
+
+            ### Core Workflow
+            - `agent-browser open <url>` - Navigate to URL
+            - `agent-browser snapshot -i` - Get interactive elements with refs (REQUIRED after navigation)
+            - `agent-browser snapshot -i -c` - Compact output for large pages
+
+            ### Interactions
+            - `agent-browser click @ref` - Click element
+            - `agent-browser fill @ref "text"` - Clear and fill input field
+            - `agent-browser type @ref "text"` - Type with key events
+            - `agent-browser press Enter` - Press key (Enter, Tab, Escape)
+            - `agent-browser select @ref "option"` - Select dropdown option
+            - `agent-browser check @ref` / `uncheck @ref` - Checkbox control
+            - `agent-browser hover @ref` - Hover (for dropdowns/tooltips)
+
+            ### Assertions
+            - `agent-browser get text @ref` - Get element text
+            - `agent-browser get value @ref` - Get input value
+            - `agent-browser get url` - Get current URL
+            - `agent-browser get title` - Get page title
+            - `agent-browser is visible @ref` - Check visibility
+
+            ### Waiting
+            - `agent-browser wait --text "..."` - Wait for text to appear
+            - `agent-browser wait --url "**/path"` - Wait for URL pattern
+            - `agent-browser wait --load networkidle` - Wait for network idle
+
+            ### Other
+            - `agent-browser scroll down 500` - Scroll page
+            - `agent-browser screenshot <name>.png` - Capture screenshot
+
+            4. **Track results** for each test and step
+
+            5. **After all tests**, create a summary report
+
+            ## Workflow for each test
+
+            ```
+            1. Read ALL test markdown files first to build dependency graph
+            2. Parse the frontmatter for config (timeout, retries, dependsOn, profile, saveProfile)
+            3. Order tests: run tests with no dependencies first, then dependent tests
+            4. For each test:
+              a. If `profile` is set, load saved state: `agent-browser state load profiles/<profile>.json`
+              b. If `dependsOn` is set, verify all dependencies passed (skip if any failed)
+              c. Replace {{VARIABLE}} placeholders with secrets
+              d. Execute each step:
+                  - Run agent-browser commands
+                  - Take snapshots to see element refs
+                  - Interact using @refs
+                  - Record step result (PASS/FAIL)
+              e. Take screenshot on failure if configured
+              f. If `saveProfile` is set and test passed: `agent-browser state save profiles/<saveProfile>.json`
+            5. Move to next test
+            ```
+
+            ## Test Dependencies & Profiles
+
+            - **dependsOn**: Array of test names that must pass before this test runs
+            - **profile**: Load browser state (cookies, localStorage) from a saved profile
+            - **saveProfile**: Save browser state to a profile after test passes
+
+            Example ordering for tests:
+            - `login.test.md` (no deps, has `saveProfile: authenticated`) → runs first
+            - `create-repo.test.md` (dependsOn: [login], profile: authenticated) → runs after login
+            - `explore-data.test.md` (dependsOn: [login], profile: authenticated) → runs after login
+
+            Profile commands:
+            - Save: `agent-browser state save profiles/authenticated.json`
+            - Load: `agent-browser state load profiles/authenticated.json`
+
+            ## Output Format
+
+            After completing all tests, write results to these files:
+
+            1. `test-results.json` - Full JSON report:
+            ```json
+            {
+              "summary": { "total": N, "passed": N, "failed": N },
+              "tests": [
+                {
+                  "name": "Test Name",
+                  "passed": true/false,
+                  "duration": 1234,
+                  "steps": [...]
+                }
+              ]
+            }
+            ```
+
+            2. Write to $GITHUB_STEP_SUMMARY
+
+            3. **Post PR Comment** (REQUIRED): After all tests complete, post a concise summary to the PR using gh CLI.
+
+              Analyze your test results and create a focused, actionable comment:
+              - Lead with the overall status (✅ All Passed or ❌ X Failed)
+              - For failures: Include ONLY the essential error info - what failed and why
+              - Skip verbose step-by-step logs - focus on what matters
+              - Keep it scannable - developers should understand the status in 5 seconds
+
+              Example format:
+              ```
+              ## 🧪 E2E Test Results
+
+              | Status | Total | Passed | Failed |
+              |--------|-------|--------|--------|
+              | ✅ | 5 | 5 | 0 |
+
+              All tests passed successfully.
+              ```
+
+              Or for failures:
+              ```
+              ## 🧪 E2E Test Results
+
+              | Status | Total | Passed | Failed |
+              |--------|-------|--------|--------|
+              | ❌ | 5 | 3 | 2 |
+
+              ### Failed Tests
+              - **Login Flow**: Authentication failed - invalid credentials error
+              - **Data Export**: Timeout waiting for download button
+
+              <details>
+              <summary>All Results</summary>
+
+              - ✅ Homepage Load
+              - ✅ Navigation
+              - ❌ Login Flow
+              - ✅ Search
+              - ❌ Data Export
+              </details>
+              ```
+
+              Post the comment (if PR number is available):
+              ```bash
+              if [ -n "${{ inputs.pr-number || github.event.pull_request.number || '' }}" ] && [ "${{ inputs.pr-number || github.event.pull_request.number || '' }}" != "N/A" ]; then
+                gh pr comment ${{ inputs.pr-number || github.event.pull_request.number }} --body "$(cat <<'EOF'
+              <your markdown comment here>
+              EOF
+              )"
+              else
+                echo "No valid PR number available, skipping comment posting"
+              fi
+              ```
+            ## Begin Testing
+
+            Start by listing the test files in ${{ inputs.test-dir }} and then execute each one.
+
+      - name: Parse results
+        id: parse-results
+        if: always()
+        shell: bash
+        run: |
+          if [ -f test-results.json ]; then
+            PASSED=$(jq -r '.summary.passed // 0' test-results.json)
+            FAILED=$(jq -r '.summary.failed // 0' test-results.json)
+            echo "passed=$PASSED" >> $GITHUB_OUTPUT
+            echo "failed=$FAILED" >> $GITHUB_OUTPUT
+
+            if [ "$FAILED" -gt 0 ]; then
+              echo "result=failed" >> $GITHUB_OUTPUT
+            else
+              echo "result=passed" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "result=unknown" >> $GITHUB_OUTPUT
+            echo "passed=0" >> $GITHUB_OUTPUT
+            echo "failed=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentic-ui-tests-screenshots
+          path: |
+            screenshots/
+            *.png
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentic-ui-tests-report
+          path: test-results.json
+          retention-days: 30
+          if-no-files-found: ignore
