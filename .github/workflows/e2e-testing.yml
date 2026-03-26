@@ -59,19 +59,6 @@ on:
         description: "Maximum number of turns for the Claude model"
         required: false
         default: 200
-    outputs:
-      result:
-        description: "Overall test result: passed or failed"
-        value: ${{ steps.parse-results.outputs.result }}
-      passed:
-        description: "Number of passed tests"
-        value: ${{ steps.parse-results.outputs.passed }}
-      failed:
-        description: "Number of failed tests"
-        value: ${{ steps.parse-results.outputs.failed }}
-      test_count:
-        description: "Number of test files detected"
-        value: ${{ steps.prepare.outputs.test_count }}
     secrets:
       CLAUDE_TOKEN:
         description: "Claude Code OAuth token"
