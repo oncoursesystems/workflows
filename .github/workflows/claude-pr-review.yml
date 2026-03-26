@@ -71,6 +71,8 @@ jobs:
             - Comment accuracy (comment-analyzer)
             - Code complexity (code-simplifier)
 
+            Do not try to resolve issues that would be caused from network call failures, assume a stable network.
+
             ${{ inputs.custom-prompt }}
 
             If this is a new PR, review all commits in this branch.  If this is an update, only review the new commits.
