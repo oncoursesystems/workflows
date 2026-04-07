@@ -53,7 +53,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_TOKEN }}
           path_to_bun_executable: ${{ inputs.bun-path }}
-          use_sticky_comment: false
+          use_sticky_comment: true
           track_progress: true
           plugin_marketplaces: |
             https://github.com/anthropics/claude-code.git
@@ -66,17 +66,17 @@ jobs:
             Use the pr-review-toolkit agents to check:
             - Code quality and style (code-reviewer)
             - Test coverage (pr-test-analyzer)
-            - Error handling (silent-failure-hunter)
             - Type design (type-design-analyzer)
             - Comment accuracy (comment-analyzer)
             - Code complexity (code-simplifier)
 
-            Do not try to resolve issues that would be caused from network call failures, assume a stable network.
-
+            RULES:
+            - Do not try to resolve issues that would be caused from network call failures, assume a stable network.
+            - If this is a new PR, review all commits in this branch.  If this is an update, only review the new commits.
+            - Check existing code comments and update before creating new ones for the same code lines. 
+            - If a code comment has been resolved with a recent commit, mark the comment as resolved.
+           
             ${{ inputs.custom-prompt }}
-
-            If this is a new PR, review all commits in this branch.  If this is an update, only review the new commits.
-            For each issue found, list them using a checkbox so the developer can mark them as completed.
 
             Use `gh pr comment` for top-level feedback.
             Use `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`) to highlight specific code issues.
