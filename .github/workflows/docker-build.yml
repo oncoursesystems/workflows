@@ -15,6 +15,10 @@ on:
         description: Docker context (path) to start build from
         type: string
         required: false
+      file:
+        description: Path to the Dockerfile (relative to context). Defaults to {context}/Dockerfile.
+        type: string
+        required: false
       registry:
         description: Server address of the container registry. If not set then will default to GitHub
         type: string
@@ -95,6 +99,7 @@ jobs:
         with:
           platforms: ${{ inputs.platforms }}
           context: ${{ inputs.context }}
+          file: ${{ inputs.file }}
           builder: ${{ steps.buildx.outputs.name }}
           push: ${{ inputs.push }}
           tags: ${{ steps.metadata.outputs.tags }}
