@@ -26,6 +26,11 @@ on:
         description: "Path to pre-installed Bun runtime (leave blank to let Claude install Bun)"
         required: false
         default: /home/runner/.bun/bin/bun
+      show-full-output:
+        type: string
+        description: "Show full Claude output (tool calls, results) in the Actions log. May expose sensitive data - debug only."
+        required: false
+        default: "false"
     secrets:
       CLAUDE_TOKEN:
         description: "Claude Code OAuth token"
@@ -53,6 +58,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_TOKEN }}
           path_to_bun_executable: ${{ inputs.bun-path }}
+          show_full_output: ${{ inputs.show-full-output }}
           use_sticky_comment: true
           track_progress: true
           plugin_marketplaces: |
