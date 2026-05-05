@@ -107,6 +107,7 @@ jobs:
           push: ${{ inputs.push }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: $${{ steps.metadata.outputs.labels }}
+          provenance: false
           build-args: |
             APP_VERSION=${{ steps.metadata.outputs.version }}
           # use github cache API for faster builds:
