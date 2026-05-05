@@ -60,23 +60,23 @@ jobs:
         with:
           bun-version: ${{ inputs.bun-version }}
 
-      # - name: 🏦 Cache dependencies
-      #   if: steps.test.outputs.files_exists == 'true'
-      #   id: cache-bun
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: ~/.bun/install/cache
-      #     key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-bun-
+      - name: 🏦 Cache dependencies
+        if: steps.test.outputs.files_exists == 'true'
+        id: cache-bun
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: 📦 Install dependencies
-        if: steps.test.outputs.files_exists == 'true' #&& steps.cache-npm.outputs.cache-hit != 'true'
+        if: steps.test.outputs.files_exists == 'true'
         working-directory: ${{ inputs.nodejs-project-path }}
         run: bun install --frozen-lockfile
 
       - name: 🚀 Bun run build
-        if: steps.test.outputs.files_exists == 'true' #&& steps.cache-npm.outputs.cache-hit != 'true'
+        if: steps.test.outputs.files_exists == 'true'
         working-directory: ${{ inputs.nodejs-project-path }}
         run: bun run build
 
@@ -100,6 +100,8 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
+          cache: true
+          cache-dependency-path: "**/*.csproj"
 
       - name: 🚀 Dotnet build
         if: steps.test.outputs.files_exists == 'true'
