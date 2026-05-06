@@ -8,15 +8,18 @@ on:
         default: self-hosted
       package-name:
         type: string
-        default: ${{ github.repository }}
+        default: ${{ github.event.repository.name }}
 
 jobs:
   release:
     runs-on: ${{ inputs.runs-on }}
     steps:
+      # actions/delete-package-versions@v5 is NOT safe with BuildX OCI image
+      # indexes — it treats per-platform manifests as "untagged" and deletes
+      # them, breaking the tagged index. This action is OCI-index-aware.
       - name: Delete untagged packages
-        uses: actions/delete-package-versions@v5
+        uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          package-name: ${{ inputs.package-name }}
-          package-type: "container"
-          delete-only-untagged-versions: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          package: ${{ inputs.package-name }}
+          delete-untagged: true
