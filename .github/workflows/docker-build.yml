@@ -67,7 +67,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: 📥 Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: ⚙️  Setup Docker BuildX
         id: buildx
@@ -98,7 +98,7 @@ jobs:
           flavor: ${{ inputs.flavor-rules }}
 
       - name: 🚀 Docker Build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           platforms: ${{ inputs.platforms }}
           context: ${{ inputs.context || '.' }}
