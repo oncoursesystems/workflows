@@ -11,6 +11,16 @@ on:
         description: "Claude model to use (e.g., claude-opus-4-5, claude-sonnet-4-6)"
         required: false
         default: "claude-sonnet-4-6"
+      prompt-file:
+        type: string
+        description: "Path to a markdown file containing review instructions (read by Claude at runtime)"
+        required: false
+        default: ""
+      fetch-depth:
+        type: number
+        description: "Git fetch depth (0 = full history, 1 = shallow)"
+        required: false
+        default: 1
       custom-prompt:
         type: string
         description: "Additional custom instructions for the review"
@@ -49,7 +59,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ inputs.fetch-depth }}
 
       - name: Run Claude PR Review
         uses: anthropics/claude-code-action@v1
@@ -61,27 +71,17 @@ jobs:
           show_full_output: ${{ inputs.show-full-output }}
           use_sticky_comment: true
           track_progress: true
-          plugin_marketplaces: |
-            https://github.com/anthropics/claude-code.git
-          plugins: |
-            pr-review-toolkit@claude-code-plugins
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
-            
-            Use the pr-review-toolkit agents to check:
-            - Code quality and style (code-reviewer)
-            - Test coverage (pr-test-analyzer)
-            - Type design (type-design-analyzer)
-            - Comment accuracy (comment-analyzer)
-            - Code complexity (code-simplifier)
+
+            ${{ inputs.prompt-file != '' && format('Read the file `{0}` for your review instructions.', inputs.prompt-file) || 'Review this pull request for correctness, security, and significant improvements. Skip style nits.' }}
 
             RULES:
-            - Do not try to resolve issues that would be caused from network call failures, assume a stable network.
-            - If this is a new PR, review all commits in this branch.  If this is an update, only review the new commits.
-            - Check existing code comments and update before creating new ones for the same code lines. 
+            - If this is a new PR, review all commits in this branch. If this is an update, only review the new commits.
+            - Check existing code comments and update before creating new ones for the same code lines.
             - If a code comment has been resolved with a recent commit, mark the comment as resolved.
-           
+
             ${{ inputs.custom-prompt }}
 
             Use `gh pr comment` for top-level feedback.
