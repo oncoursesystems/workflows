@@ -31,6 +31,10 @@ on:
         type: string
         required: false
         default: .
+      dotnet-locked-mode:
+        type: boolean
+        required: false
+        default: false
 
 env:
   DOTNET_INSTALL_DIR: "./.dotnet" # Needed otherwise dotnet setup will fail due to permissions on the k8s runner
@@ -103,10 +107,15 @@ jobs:
           cache: true
           cache-dependency-path: "**/*.csproj"
 
+      - name: 📦 Dotnet restore (locked mode)
+        if: steps.test.outputs.files_exists == 'true' && inputs.dotnet-locked-mode
+        working-directory: ${{ inputs.dotnet-project-path }}
+        run: dotnet restore --locked-mode
+
       - name: 🚀 Dotnet build
         if: steps.test.outputs.files_exists == 'true'
         working-directory: ${{ inputs.dotnet-project-path }}
-        run: dotnet build --nologo --configuration Release
+        run: dotnet build --nologo --configuration Release ${{ inputs.dotnet-locked-mode && '--no-restore' || '' }}
 
   build-dotnet-framework:
     runs-on: ${{ inputs.runs-on }}
