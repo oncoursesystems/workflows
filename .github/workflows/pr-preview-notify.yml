@@ -27,7 +27,7 @@ on:
 
 jobs:
   wait-and-notify:
-    runs-on: [self-hosted, Linux]
+    runs-on: k8s-linux
     steps:
       - name: Generate GitHub App token
         id: app-token
