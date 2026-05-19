@@ -5,6 +5,9 @@ on:
     inputs:
       runs-on:
         type: string
+        default: k8s-linux
+      runs-on-windows:
+        type: string
         default: self-hosted
       sparse-checkout:
         type: string
@@ -118,7 +121,7 @@ jobs:
         run: dotnet build --nologo --configuration Release ${{ inputs.dotnet-locked-mode && '--no-restore' || '' }}
 
   build-dotnet-framework:
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ inputs.runs-on-windows }}
     steps:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4

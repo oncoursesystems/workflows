@@ -8,7 +8,7 @@ jobs:
   manage-preview-environment:
     uses: oncoursesystems/workflows/.github/workflows/pr-preview.yml@main
     with:
-      runs-on: linux
+      runs-on: k8s-linux
       base-url: yourdomain.com
       environments: "['devel']"
       env-values-path: ./github/examples/errata/pr-previews

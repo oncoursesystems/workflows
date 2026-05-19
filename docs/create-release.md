@@ -14,7 +14,7 @@ This depends on the following actions:
 
 **Optional** The type of runner to use for the job
 
-**Default** `self-hosted`
+**Default** `k8s-linux`
 
 ### `version`
 

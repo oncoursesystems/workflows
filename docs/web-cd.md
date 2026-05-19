@@ -13,7 +13,7 @@ This depends on the following workflows:
 
 **Optional** The type of runner to use for the job
 
-**Default** `self-hosted`
+**Default** `k8s-linux`
 
 ## Usage
 
@@ -29,7 +29,7 @@ jobs:
   deploy:
     uses: oncoursesystems/workflows/.github/workflows/web-cd.yml@main
     with:
-      runs-on: self-hosted
+      runs-on: k8s-linux
 ```
 
 This will:

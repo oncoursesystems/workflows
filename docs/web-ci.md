@@ -14,7 +14,13 @@ This depends on the following actions:
 
 ### `runs-on`
 
-**Optional** The type of runner to use for the job
+**Optional** The type of runner to use for the Node.js and .NET Core build jobs
+
+**Default** `k8s-linux`
+
+### `runs-on-windows`
+
+**Optional** The type of runner to use for the .NET Framework build job (requires Windows/MSBuild)
 
 **Default** `self-hosted`
 

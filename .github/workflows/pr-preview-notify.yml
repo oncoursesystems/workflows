@@ -15,6 +15,9 @@ on:
       argocd-app-name:
         required: true
         type: string
+      runs-on:
+        type: string
+        default: k8s-linux
     secrets:
       GH_APP_ID:
         required: true
@@ -27,7 +30,7 @@ on:
 
 jobs:
   wait-and-notify:
-    runs-on: k8s-linux
+    runs-on: ${{ inputs.runs-on }}
     steps:
       - name: Generate GitHub App token
         id: app-token
