@@ -279,7 +279,7 @@ jobs:
   e2e:
     uses: oncoursesystems/workflows/.github/workflows/e2e-testing.yml@main
     with:
-      runs-on: ubuntu-latest
+      runs-on: k8s-linux
       test-dir: ./e2e-tests
       base-url: https://preview-${{ github.event.pull_request.number }}.example.com
       tags: ${{ github.event.inputs.tags || 'smoke' }}

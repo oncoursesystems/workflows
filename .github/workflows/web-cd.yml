@@ -5,7 +5,7 @@ on:
     inputs:
       runs-on:
         type: string
-        default: self-hosted
+        default: k8s-linux
 
 jobs:
   docker-publish:

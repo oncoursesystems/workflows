@@ -32,7 +32,7 @@ This depends on the following actions:
 
 **Optional** Defines the type of machine to run the workflow on
 
-**Default** `self-hosted`
+**Default** `k8s-linux`
 
 ### `push`
 
