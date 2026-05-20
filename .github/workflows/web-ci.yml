@@ -50,7 +50,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           sparse-checkout: ${{ inputs.sparse-checkout }}
 
@@ -70,7 +70,7 @@ jobs:
       - name: 🏦 Cache dependencies
         if: steps.test.outputs.files_exists == 'true'
         id: cache-bun
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
@@ -91,7 +91,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           sparse-checkout: ${{ inputs.sparse-checkout }}
 
@@ -104,7 +104,7 @@ jobs:
 
       - name: ⚙️ Setup Dotnet
         if: steps.test.outputs.files_exists == 'true'
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           cache: true
@@ -124,7 +124,7 @@ jobs:
     runs-on: ${{ inputs.runs-on-windows }}
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           sparse-checkout: ${{ inputs.sparse-checkout }}
 
@@ -137,7 +137,7 @@ jobs:
 
       - name: ⚙️ Setup MSBuild
         if: steps.test.outputs.files_exists == 'true'
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
 
       - name: ⚙️ Setup Nuget
         if: steps.test.outputs.files_exists == 'true'

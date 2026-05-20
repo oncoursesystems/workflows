@@ -20,7 +20,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Generate version number - Windows OS
         if: ${{ runner.os == 'Windows' }}
@@ -34,7 +34,7 @@ jobs:
           echo "VERSION=$(date +"%Y.%m.%d.%H%M")" >> ${GITHUB_ENV}
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           token: ${{ secrets.CREATE_RELEASE_PAT }}
           name: v${{ env.VERSION }}
