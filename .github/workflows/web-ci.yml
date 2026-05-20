@@ -141,7 +141,7 @@ jobs:
 
       - name: ⚙️ Setup Nuget
         if: steps.test.outputs.files_exists == 'true'
-        uses: nuget/setup-nuget@v2
+        uses: nuget/setup-nuget@v4
 
       - name: 📦 Restore packages
         if: steps.test.outputs.files_exists == 'true'
