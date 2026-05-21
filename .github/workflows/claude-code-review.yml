@@ -1,0 +1,257 @@
+name: claude-code-review
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        default: ubuntu-latest
+      anthropic-model:
+        type: string
+        description: "Override the auto-selected Claude model. Leave empty for automatic PR-size-based selection."
+        required: false
+        default: ""
+      custom-prompt:
+        type: string
+        description: "Additional instructions appended to the review prompt."
+        required: false
+        default: ""
+      plugins:
+        type: string
+        description: "Claude Code plugins to use (e.g., 'thayer-code-agent@thayer-code-agent')"
+        required: false
+        default: ""
+      allowed-tools:
+        type: string
+        description: "Tools allowed for Claude to use"
+        required: false
+        default: 'Read,Grep,Glob,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr edit:*),Bash(gh api:*)'
+      small-pr-threshold:
+        type: number
+        description: "Line change threshold for model selection. PRs at or above this use the large model."
+        required: false
+        default: 200
+      small-pr-model:
+        type: string
+        description: "Model for PRs under the threshold"
+        required: false
+        default: "claude-haiku-4-5-20251001"
+      large-pr-model:
+        type: string
+        description: "Model for PRs at or above the threshold"
+        required: false
+        default: "claude-sonnet-4-6"
+    secrets:
+      CLAUDE_TOKEN:
+        description: "Claude Code OAuth token"
+        required: true
+      PLUGIN_MARKETPLACE_AUTH:
+        description: "Authenticated plugin marketplace URL(s). Use for private registries requiring a token."
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  select-model:
+    runs-on: ${{ inputs.runs-on }}
+    outputs:
+      model: ${{ steps.pick-model.outputs.model }}
+      pr-number: ${{ steps.pr-stats.outputs.pr-number }}
+      base-ref: ${{ steps.pr-stats.outputs.base-ref }}
+    steps:
+      - name: Get PR stats
+        id: pr-stats
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number || github.event.issue.number }}
+          STATS=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER} --jq '{additions, deletions, base_ref: .base.ref}')
+          ADDITIONS=$(echo "$STATS" | jq '.additions')
+          DELETIONS=$(echo "$STATS" | jq '.deletions')
+          TOTAL=$((ADDITIONS + DELETIONS))
+          BASE_REF=$(echo "$STATS" | jq -r '.base_ref')
+          echo "changed-lines=${TOTAL}" >> "$GITHUB_OUTPUT"
+          echo "pr-number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "base-ref=${BASE_REF}" >> "$GITHUB_OUTPUT"
+
+      - name: Pick model
+        id: pick-model
+        run: |
+          OVERRIDE="${{ inputs.anthropic-model }}"
+          if [ -n "$OVERRIDE" ]; then
+            echo "model=$OVERRIDE" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.pr-stats.outputs.changed-lines }}" -ge "${{ inputs.small-pr-threshold }}" ]; then
+            echo "model=${{ inputs.large-pr-model }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "model=${{ inputs.small-pr-model }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  review:
+    needs: select-model
+    runs-on: ${{ inputs.runs-on }}
+    concurrency:
+      group: claude-code-review-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Cleanup previous code reviews
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          PR=${{ needs.select-model.outputs.pr-number }}
+
+          # Resolve open review threads from previous code reviews
+          THREADS=$(gh api graphql -f query='
+            query($owner:String!, $repo:String!, $pr:Int!) {
+              repository(owner:$owner, name:$repo) {
+                pullRequest(number:$pr) {
+                  reviewThreads(first:100) {
+                    nodes {
+                      id
+                      isResolved
+                      comments(first:1) {
+                        nodes {
+                          author { login }
+                          pullRequestReview { body }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -f owner="$OWNER" -f repo="$REPO" -F pr="$PR" \
+            --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+              | select(
+                  .isResolved == false
+                  and (.comments.nodes[0].author.login == "github-actions[bot]" or .comments.nodes[0].author.login == "claude[bot]")
+                  and (.comments.nodes[0].pullRequestReview.body // "" | test("Code Review"))
+                )
+              | .id') || true
+
+          for THREAD_ID in $THREADS; do
+            gh api graphql -f query='
+              mutation($id:ID!) {
+                resolveReviewThread(input:{threadId:$id}) { thread { isResolved } }
+              }' -f id="$THREAD_ID" 2>/dev/null || true
+          done
+
+          # Dismiss and delete old code review submissions
+          OLD_REVIEW_IDS=$(gh api "/repos/$OWNER/$REPO/pulls/$PR/reviews" --paginate \
+            --jq '.[]
+              | select(
+                  (.user.login == "github-actions[bot]" or .user.login == "claude[bot]")
+                  and (.body | test("Code Review"))
+                )
+              | .id') || true
+
+          for RID in $OLD_REVIEW_IDS; do
+            COMMENT_IDS=$(gh api "/repos/$OWNER/$REPO/pulls/$PR/reviews/${RID}/comments" --jq '.[].id' 2>/dev/null || true)
+            for CID in $COMMENT_IDS; do
+              gh api -X DELETE "/repos/$OWNER/$REPO/pulls/comments/${CID}" 2>/dev/null || true
+            done
+            gh api -X PUT "/repos/$OWNER/$REPO/pulls/$PR/reviews/${RID}/dismissals" \
+              -f message="Superseded by updated review" -f event="DISMISS" 2>/dev/null || true
+          done
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_TOKEN }}
+          plugin_marketplaces: ${{ secrets.PLUGIN_MARKETPLACE_AUTH }}
+          plugins: ${{ inputs.plugins }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ needs.select-model.outputs.pr-number }}
+            BASE BRANCH: ${{ needs.select-model.outputs.base-ref }}
+
+            ## Task 1: Update PR Title and Description
+
+            First, analyze the changes in this PR and update the title and description:
+
+            1. Use `gh pr diff ${{ needs.select-model.outputs.pr-number }}` to see all changes
+            2. Generate a concise, descriptive title (max 72 chars) that summarizes WHAT changed
+               - **IMPORTANT**: If the current PR title starts with a ticket number (e.g., "1234", "4753"), preserve that number at the beginning of the new title
+               - Example: "4753 stuff" should become "4753 Add transaction state handling", NOT "Add transaction state handling"
+            3. Generate a PR description with:
+               - **Summary**: 2-4 bullet points explaining what changed and why
+               - **Files Changed**: List the key files modified
+               - **DB Changes**: First check the existing PR description for a DB Changes section. If it exists and has content (not just placeholder text), preserve it exactly as-is. If empty or missing, use placeholder text "<!-- Add any database changes here (migrations, schema changes, etc.) -->"
+               - **Dev Notes**: First check the existing PR description for a Dev Notes section. If it exists and has content (not just placeholder text), preserve it exactly as-is. If empty or missing, use placeholder text "<!-- Add any additional notes, context, or information here -->"
+               - **Breaking Changes**: Document any breaking changes (or state "None")
+               - **Test Plan**: 2-4 bullet points for testing the changes
+
+            4. Update the PR using:
+               ```
+               gh pr edit ${{ needs.select-model.outputs.pr-number }} --title "Your title" --body "Your description"
+               ```
+
+            ## Task 2: Code Review
+
+            **IMPORTANT**: This is a fresh review of the CURRENT state of the code. Do NOT reference or carry over issues from previous reviews. Only report issues that exist in the code RIGHT NOW.
+
+            Before reviewing, read the actual source files to verify the current state of the code. Use `gh pr diff ${{ needs.select-model.outputs.pr-number }}` to see the latest changes. When a changed file follows (or deviates from) an existing pattern in the codebase, use Read/Grep/Glob to check the reference implementation before flagging an issue.
+
+            Review this pull request and provide feedback on:
+            - Code quality and best practices
+            - Potential bugs or issues
+            - Performance considerations
+            - Test coverage
+
+            **Scope**: Focus on code quality, bugs, and performance. Do NOT duplicate security review work — skip OWASP-style findings (XSS, injection, auth, access control). The security review workflow handles those separately. You may flag error handling gaps or missing input validation when they cause functional bugs, but not as security concerns.
+
+            Only report issues you can verify exist in the current code. If an issue was fixed in a recent commit, do not mention it.
+
+            **Severity threshold**: Every finding you report should be worth the developer's time to address. Do NOT report:
+            - Theoretical risks on values that are already safe by type (e.g., XSS on a numeric value that cannot contain HTML)
+            - "Defense in depth" suggestions where the current code is already correct
+            - Style preferences that don't affect correctness or readability
+            - Minor resource management issues in short-lived contexts (e.g., blob URL leaks in a modal window)
+
+            If the code is clean and follows project conventions, say so. An empty comments array with a positive summary is a valid review. Quality over quantity — fewer actionable findings are better than many marginal ones.
+
+            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
+
+            ## Posting Your Review
+
+            Submit your review as a **GitHub Pull Request Review with inline line comments**. This provides the native GitHub code review UX where comments appear next to the relevant code.
+
+            Previous review threads have been resolved and old reviews deleted automatically.
+
+            ### Build and Submit Review
+            Create a JSON file with your review, then submit it:
+            ```bash
+            cat > /tmp/review.json << 'REVIEW_EOF'
+            {
+              "event": "COMMENT",
+              "body": "## Code Review\n\nYour overall summary here...\n\n[bot] Generated with [Claude Code](https://claude.ai/claude-code)",
+              "comments": [
+                {"path": "src/example.ts", "line": 42, "body": "**Bug**: Description here"},
+                {"path": "src/other.ts", "line": 15, "body": "**Suggestion**: Consider..."}
+              ]
+            }
+            REVIEW_EOF
+            gh api "/repos/${{ github.repository }}/pulls/${{ needs.select-model.outputs.pr-number }}/reviews" --input /tmp/review.json
+            ```
+
+            **Rules for inline comments:**
+            - `path`: File path relative to repo root (must appear in the diff)
+            - `line`: Line number in the **new version** of the file (right side of diff)
+            - Only comment on lines that are part of the PR diff (added or modified lines)
+            - Use severity prefixes: **Bug**, **Performance**, **Style**, **Suggestion**
+            - If no issues found, submit with an empty comments array and a positive summary
+            - Always end the review body with: "[bot] Generated with [Claude Code](https://claude.ai/claude-code)"
+
+            ${{ inputs.custom-prompt }}
+
+          claude_args: '--model ${{ needs.select-model.outputs.model }} --allowed-tools "${{ inputs.allowed-tools }}"'

@@ -6,13 +6,34 @@ on:
   issue_comment:
     types: [created]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  review:
+  code-review:
     if: >
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
        contains(github.event.comment.body, '@claude'))
-    uses: oncoursesystems/workflows/.github/workflows/claude-pr-review.yml@main
+    uses: oncoursesystems/workflows/.github/workflows/claude-code-review.yml@main
+    # Uncomment 'with' to customize:
+    # with:
+    #   custom-prompt: |
+    #     This repo uses Dapper for data access — check for parameterized queries.
+    #   plugins: "thayer-code-agent@thayer-code-agent"
+    secrets:
+      CLAUDE_TOKEN: ${{ secrets.CLAUDE_TOKEN }}
+      # Uncomment for private plugin registries:
+      # PLUGIN_MARKETPLACE_AUTH: "https://x-access-token:${{ secrets.PLUGIN_REGISTRY_TOKEN }}@github.com/YourOrg/your-registry.git"
+
+  security-review:
+    if: >
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@claude'))
+    uses: oncoursesystems/workflows/.github/workflows/claude-security-review.yml@main
     secrets:
       CLAUDE_TOKEN: ${{ secrets.CLAUDE_TOKEN }}
