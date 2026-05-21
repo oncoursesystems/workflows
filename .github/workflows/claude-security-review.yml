@@ -1,0 +1,264 @@
+name: claude-security-review
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        default: ubuntu-latest
+      anthropic-model:
+        type: string
+        description: "Override the auto-selected Claude model. Leave empty for automatic PR-size-based selection."
+        required: false
+        default: ""
+      custom-prompt:
+        type: string
+        description: "Additional instructions appended to the security review prompt."
+        required: false
+        default: ""
+      plugins:
+        type: string
+        description: "Claude Code plugins to use (e.g., 'thayer-code-agent@thayer-code-agent')"
+        required: false
+        default: ""
+      allowed-tools:
+        type: string
+        description: "Tools allowed for Claude to use"
+        required: false
+        default: 'Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*)'
+      small-pr-threshold:
+        type: number
+        description: "Line change threshold for model selection. PRs at or above this use the large model."
+        required: false
+        default: 200
+      small-pr-model:
+        type: string
+        description: "Model for PRs under the threshold"
+        required: false
+        default: "claude-haiku-4-5-20251001"
+      large-pr-model:
+        type: string
+        description: "Model for PRs at or above the threshold"
+        required: false
+        default: "claude-sonnet-4-6"
+    secrets:
+      CLAUDE_TOKEN:
+        description: "Claude Code OAuth token"
+        required: true
+      PLUGIN_MARKETPLACE_AUTH:
+        description: "Authenticated plugin marketplace URL(s). Use for private registries requiring a token."
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  select-model:
+    runs-on: ${{ inputs.runs-on }}
+    outputs:
+      model: ${{ steps.pick-model.outputs.model }}
+      pr-number: ${{ steps.pr-stats.outputs.pr-number }}
+      base-ref: ${{ steps.pr-stats.outputs.base-ref }}
+    steps:
+      - name: Get PR stats
+        id: pr-stats
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number || github.event.issue.number }}
+          STATS=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER} --jq '{additions, deletions, base_ref: .base.ref}')
+          ADDITIONS=$(echo "$STATS" | jq '.additions')
+          DELETIONS=$(echo "$STATS" | jq '.deletions')
+          TOTAL=$((ADDITIONS + DELETIONS))
+          BASE_REF=$(echo "$STATS" | jq -r '.base_ref')
+          echo "changed-lines=${TOTAL}" >> "$GITHUB_OUTPUT"
+          echo "pr-number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "base-ref=${BASE_REF}" >> "$GITHUB_OUTPUT"
+
+      - name: Pick model
+        id: pick-model
+        run: |
+          OVERRIDE="${{ inputs.anthropic-model }}"
+          if [ -n "$OVERRIDE" ]; then
+            echo "model=$OVERRIDE" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.pr-stats.outputs.changed-lines }}" -ge "${{ inputs.small-pr-threshold }}" ]; then
+            echo "model=${{ inputs.large-pr-model }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "model=${{ inputs.small-pr-model }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  review:
+    needs: select-model
+    runs-on: ${{ inputs.runs-on }}
+    concurrency:
+      group: claude-security-review-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Cleanup previous security reviews
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          PR=${{ needs.select-model.outputs.pr-number }}
+
+          # Resolve open review threads from previous security reviews
+          THREADS=$(gh api graphql -f query='
+            query($owner:String!, $repo:String!, $pr:Int!) {
+              repository(owner:$owner, name:$repo) {
+                pullRequest(number:$pr) {
+                  reviewThreads(first:100) {
+                    nodes {
+                      id
+                      isResolved
+                      comments(first:1) {
+                        nodes {
+                          author { login }
+                          pullRequestReview { body }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -f owner="$OWNER" -f repo="$REPO" -F pr="$PR" \
+            --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+              | select(
+                  .isResolved == false
+                  and (.comments.nodes[0].author.login == "github-actions[bot]" or .comments.nodes[0].author.login == "claude[bot]")
+                  and (.comments.nodes[0].pullRequestReview.body // "" | test("Security Review"))
+                )
+              | .id') || true
+
+          for THREAD_ID in $THREADS; do
+            gh api graphql -f query='
+              mutation($id:ID!) {
+                resolveReviewThread(input:{threadId:$id}) { thread { isResolved } }
+              }' -f id="$THREAD_ID" 2>/dev/null || true
+          done
+
+          # Dismiss and delete old security review submissions
+          OLD_REVIEW_IDS=$(gh api "/repos/$OWNER/$REPO/pulls/$PR/reviews" --paginate \
+            --jq '.[]
+              | select(
+                  (.user.login == "github-actions[bot]" or .user.login == "claude[bot]")
+                  and (.body | test("Security Review"))
+                )
+              | .id') || true
+
+          for RID in $OLD_REVIEW_IDS; do
+            COMMENT_IDS=$(gh api "/repos/$OWNER/$REPO/pulls/$PR/reviews/${RID}/comments" --jq '.[].id' 2>/dev/null || true)
+            for CID in $COMMENT_IDS; do
+              gh api -X DELETE "/repos/$OWNER/$REPO/pulls/comments/${CID}" 2>/dev/null || true
+            done
+            gh api -X PUT "/repos/$OWNER/$REPO/pulls/$PR/reviews/${RID}/dismissals" \
+              -f message="Superseded by updated review" -f event="DISMISS" 2>/dev/null || true
+          done
+
+      - name: Run Claude Security Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_TOKEN }}
+          plugin_marketplaces: ${{ secrets.PLUGIN_MARKETPLACE_AUTH }}
+          plugins: ${{ inputs.plugins }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ needs.select-model.outputs.pr-number }}
+            BASE BRANCH: ${{ needs.select-model.outputs.base-ref }}
+
+            ## Security Review
+
+            You are a security reviewer. Perform a focused security analysis of this pull request. **Scope**: Only report security vulnerabilities and risks. Do NOT report code style, performance, naming, or general code quality issues — a separate code review workflow handles those.
+
+            1. Use `gh pr diff ${{ needs.select-model.outputs.pr-number }}` to see all changes
+            2. Use Read/Grep/Glob to read the full source files for any changed files that handle user input, authentication, database queries, or external APIs. Check existing patterns in the codebase before flagging deviations.
+
+            ### Review Categories
+
+            Scan for the following security concerns:
+
+            **OWASP Top 10:**
+            - SQL Injection / NoSQL Injection (parameterized queries, ORM usage)
+            - Cross-Site Scripting (XSS) - output encoding, dangerouslySetInnerHTML
+            - Broken Authentication - token handling, session management, password storage
+            - Broken Access Control - authorization checks, privilege escalation
+            - Security Misconfiguration - debug modes, default credentials, verbose errors
+            - Insecure Deserialization - untrusted data deserialization
+            - Server-Side Request Forgery (SSRF) - URL validation, allowlists
+
+            **Secrets & Credentials:**
+            - Hardcoded API keys, passwords, tokens, or connection strings
+            - Secrets in logs, error messages, or client-side code
+            - Sensitive data in URL parameters or query strings
+
+            **Input Validation:**
+            - Missing or insufficient input validation
+            - Path traversal vulnerabilities
+            - Command injection via user input
+            - Unsafe regex patterns (ReDoS)
+
+            **Dependency Security:**
+            - Known vulnerable packages (check version numbers)
+            - Unsafe package configurations
+
+            ### Severity Ratings
+
+            Rate each finding as:
+            - **CRITICAL**: Exploitable vulnerability that could lead to data breach or system compromise
+            - **HIGH**: Significant security weakness that should be fixed before merge
+            - **MEDIUM**: Security concern that should be addressed but is lower risk
+            - **LOW**: Real security gap that should be fixed, just lower priority
+
+            **Only report findings that should actually be addressed.** Do NOT report:
+            - Theoretical XSS/injection on values that are safe by type (e.g., a numeric Oracle OUT parameter cannot contain HTML — do not suggest encoding it)
+            - "Defense in depth" suggestions where the current code path makes exploitation impossible
+            - Minor resource management issues in short-lived contexts (e.g., blob URLs in modal windows)
+            - Missing validation on internal/trusted values that never come from user input
+            - Findings that duplicate what the code review already covers
+
+            If the PR has no real security issues, say so. An empty comments array confirming no issues is a valid and useful review. Fewer actionable findings are far more valuable than many marginal ones.
+
+            Use the repository's CLAUDE.md for context on the project's security patterns and conventions.
+
+            ### Posting Your Review
+
+            Submit your review as a **GitHub Pull Request Review with inline line comments**.
+
+            Previous review threads have been resolved and old reviews deleted automatically.
+
+            #### Build and Submit Review
+            Create a JSON file with your security review, then submit it:
+            ```bash
+            cat > /tmp/security-review.json << 'REVIEW_EOF'
+            {
+              "event": "COMMENT",
+              "body": "## Security Review\n\nOverall security assessment...\n\n[bot] Generated with [Claude Code](https://claude.ai/claude-code)",
+              "comments": [
+                {"path": "src/example.ts", "line": 42, "body": "**[CRITICAL]** SQL Injection: Description..."},
+                {"path": "src/other.ts", "line": 15, "body": "**[MEDIUM]** Input Validation: Consider..."}
+              ]
+            }
+            REVIEW_EOF
+            gh api "/repos/${{ github.repository }}/pulls/${{ needs.select-model.outputs.pr-number }}/reviews" --input /tmp/security-review.json
+            ```
+
+            **Rules for inline comments:**
+            - `path`: File path relative to repo root (must appear in the diff)
+            - `line`: Line number in the **new version** of the file (right side of diff)
+            - Only comment on lines that are part of the PR diff
+            - Prefix each comment with severity: **[CRITICAL]**, **[HIGH]**, **[MEDIUM]**, **[LOW]**
+            - If no security issues found, submit with an empty comments array and a summary confirming no issues detected
+            - Always end the review body with: "[bot] Generated with [Claude Code](https://claude.ai/claude-code)"
+
+            ${{ inputs.custom-prompt }}
+
+          claude_args: '--model ${{ needs.select-model.outputs.model }} --allowed-tools "${{ inputs.allowed-tools }}"'
