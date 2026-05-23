@@ -111,7 +111,7 @@ jobs:
           REPO="${{ github.event.repository.name }}"
           PR=${{ needs.select-model.outputs.pr-number }}
 
-          # Resolve open review threads from previous security reviews
+          # Resolve ALL open review threads left by the bot (code + security + orphaned empty-body reviews)
           THREADS=$(gh api graphql -f query='
             query($owner:String!, $repo:String!, $pr:Int!) {
               repository(owner:$owner, name:$repo) {
@@ -123,7 +123,6 @@ jobs:
                       comments(first:1) {
                         nodes {
                           author { login }
-                          pullRequestReview { body }
                         }
                       }
                     }
@@ -135,7 +134,6 @@ jobs:
               | select(
                   .isResolved == false
                   and (.comments.nodes[0].author.login == "github-actions[bot]" or .comments.nodes[0].author.login == "claude[bot]")
-                  and (.comments.nodes[0].pullRequestReview.body // "" | test("Security Review"))
                 )
               | .id') || true
 
@@ -146,13 +144,10 @@ jobs:
               }' -f id="$THREAD_ID" 2>/dev/null || true
           done
 
-          # Dismiss and delete old security review submissions
+          # Delete all old bot reviews (code, security, orphaned inline-comment, and stray test reviews)
           OLD_REVIEW_IDS=$(gh api "/repos/$OWNER/$REPO/pulls/$PR/reviews" --paginate \
             --jq '.[]
-              | select(
-                  (.user.login == "github-actions[bot]" or .user.login == "claude[bot]")
-                  and (.body | test("Security Review"))
-                )
+              | select(.user.login == "github-actions[bot]" or .user.login == "claude[bot]")
               | .id') || true
 
           for RID in $OLD_REVIEW_IDS; do
@@ -258,6 +253,7 @@ jobs:
             - Prefix each comment with severity: **[CRITICAL]**, **[HIGH]**, **[MEDIUM]**, **[LOW]**
             - If no security issues found, submit with an empty comments array and a summary confirming no issues detected
             - Always end the review body with: "[bot] Generated with [Claude Code](https://claude.ai/claude-code)"
+            - **IMPORTANT**: Submit the review exactly ONCE. Do NOT make test or exploratory API calls to the reviews endpoint. Build the complete JSON file first, then submit it in a single call.
 
             ${{ inputs.custom-prompt }}
 
