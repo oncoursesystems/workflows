@@ -109,10 +109,8 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           build-args: |
             APP_VERSION=${{ steps.metadata.outputs.version }}
-          # use github cache API for faster builds:
-          # https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#cache-backend-api
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ inputs.registry }}/${{ inputs.image-name }}:buildcache
+          cache-to: type=registry,ref=${{ inputs.registry }}/${{ inputs.image-name }}:buildcache,mode=max
 
         # for dependent jobs, we need to output the unique tag for this GHA run
         # based on the docker_meta tag priority rules, the highest priority tag
