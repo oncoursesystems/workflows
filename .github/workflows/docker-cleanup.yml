@@ -18,7 +18,7 @@ jobs:
       # indexes — it treats per-platform manifests as "untagged" and deletes
       # them, breaking the tagged index. This action is OCI-index-aware.
       - name: Delete untagged packages
-        uses: dataaxiom/ghcr-cleanup-action@v1.1.0
+        uses: dataaxiom/ghcr-cleanup-action@v1.2.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           package: ${{ inputs.package-name }}
