@@ -43,6 +43,11 @@ on:
         type: string
         required: false
         default: linux/amd64
+      build-args:
+        description: Extra newline-delimited build args appended to APP_VERSION (e.g. "FOO=bar")
+        type: string
+        required: false
+        default: ''
       tag-rules:
         description: Defines rules for creating tags
         type: string
@@ -109,6 +114,7 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           build-args: |
             APP_VERSION=${{ steps.metadata.outputs.version }}
+            ${{ inputs.build-args }}
           cache-from: type=registry,ref=${{ inputs.registry }}/${{ inputs.image-name }}:buildcache
           cache-to: type=registry,ref=${{ inputs.registry }}/${{ inputs.image-name }}:buildcache,mode=max
 
