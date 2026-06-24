@@ -70,7 +70,7 @@ jobs:
       - name: 🏦 Cache dependencies
         if: steps.test.outputs.files_exists == 'true'
         id: cache-bun
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles(format('{0}/bun.lock', inputs.nodejs-project-path)) }}
