@@ -115,6 +115,12 @@ jobs:
           build-args: |
             APP_VERSION=${{ steps.metadata.outputs.version }}
             ${{ inputs.build-args }}
+          # Available inside the build as BuildKit secret id=github_packages_token
+          # (never baked into an image layer). A Dockerfile that restores private
+          # GitHub Packages mounts it; others simply ignore it. Requires packages:read
+          # in the caller job's permissions so GITHUB_TOKEN can read the org feed.
+          secrets: |
+            github_packages_token=${{ secrets.GITHUB_TOKEN }}
           cache-from: type=registry,ref=${{ inputs.registry }}/${{ inputs.image-name }}:buildcache
           cache-to: type=registry,ref=${{ inputs.registry }}/${{ inputs.image-name }}:buildcache,mode=max
 
