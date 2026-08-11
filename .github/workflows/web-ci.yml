@@ -107,7 +107,7 @@ jobs:
 
       - name: ⚙️ Setup Dotnet
         if: steps.test.outputs.files_exists == 'true'
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           cache: true
