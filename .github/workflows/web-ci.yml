@@ -58,7 +58,10 @@ jobs:
         id: test
         uses: andstor/file-existence-action@v3
         with:
-          files: "**/package.json"
+          # Gate on package.json at the node project root, not "**/package.json".
+          # The recursive glob matches unrelated files (e.g. Sencha package.json
+          # descriptors) and triggers `bun install` in a directory with no lockfile.
+          files: "${{ inputs.nodejs-project-path }}/package.json"
           ignore_case: true
 
       - name: ⚙️ Setup NodeJS
