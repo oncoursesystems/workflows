@@ -15,16 +15,12 @@ on:
       dotnet-version:
         type: string
         default: 8.0.x
-      # dotnet (SDK/"core") project path. Set to run the dotnet-core build; leave unset to skip it.
       dotnet-project-path:
         type: string
         required: false
-      # dotnet Framework project path (working directory for nuget/msbuild). Set to run the
-      # Framework build; leave unset to skip it.
       dotnet-framework-project-path:
         type: string
         required: false
-      # Solution or project file for the Framework build (relative to dotnet-framework-project-path).
       dotnet-project-file:
         type: string
         required: false
@@ -34,7 +30,6 @@ on:
       nodejs-version:
         type: string
         default: 20.x
-      # NodeJS project path. Set to run the node build; leave unset to skip it.
       nodejs-project-path:
         type: string
         required: false
@@ -43,15 +38,11 @@ on:
         default: false
 
 env:
-  DOTNET_INSTALL_DIR: "./.dotnet" # Needed otherwise dotnet setup will fail due to permissions on the k8s runner
+  DOTNET_INSTALL_DIR: "./.dotnet"
   DOTNET_CLI_HOME: "/tmp"
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1 # Suppresses the "Welcome to .NET!" message
-  CI: 1 # Disables Husky and prevents npm install running during the dotnet build
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  CI: 1
 
-# Each build job is opted into explicitly by supplying its project path. No globbing is used
-# to auto-detect projects: a job runs only when its `*-project-path` input is non-empty, and
-# builds exactly that path. This avoids silent skips (a missing/unmatched glob used to pass the
-# job green without building anything) and unrelated matches (e.g. Sencha package.json files).
 jobs:
   build-nodejs:
     if: inputs.nodejs-project-path != ''
@@ -103,18 +94,12 @@ jobs:
       - name: 📦 Dotnet restore (locked mode)
         if: inputs.dotnet-locked-mode
         working-directory: ${{ inputs.dotnet-project-path }}
-        # Feeds a private GitHub Packages source (nuget.pkg.github.com) when a repo's
-        # nuget.config references %GITHUB_PACKAGES_TOKEN%. Harmless for repos that don't
-        # (the env var is simply unused). Needs packages:read in the caller's permissions.
         env:
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: dotnet restore --locked-mode
 
       - name: 🚀 Dotnet build
-        if: inputs.dotnet-project-path != ''
         working-directory: ${{ inputs.dotnet-project-path }}
-        # Also set for the build step so non-locked-mode consumers (which restore during
-        # build) can still authenticate to the private feed.
         env:
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: dotnet build --nologo --configuration Release ${{ inputs.dotnet-locked-mode && '--no-restore' || '' }}
