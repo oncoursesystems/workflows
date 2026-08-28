@@ -32,7 +32,7 @@ on:
       runs-on:
         description: Defines the type of machine to run the workflow on
         type: string
-        default: k8s-linux
+        default: linux
       push:
         description: Enables pushing of the image to the container registry
         type: boolean

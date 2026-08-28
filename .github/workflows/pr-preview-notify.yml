@@ -17,7 +17,7 @@ on:
         type: string
       runs-on:
         type: string
-        default: k8s-linux
+        default: linux
     secrets:
       GH_APP_ID:
         required: true

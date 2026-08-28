@@ -5,7 +5,7 @@ on:
     inputs:
       runs-on:
         type: string
-        default: k8s-linux
+        default: linux
       runs-on-windows:
         type: string
         default: self-hosted
