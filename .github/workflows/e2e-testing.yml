@@ -5,7 +5,7 @@ on:
     inputs:
       runs-on:
         type: string
-        default: k8s-linux
+        default: linux
       test-dir:
         type: string
         description: "Directory containing test markdown files"
