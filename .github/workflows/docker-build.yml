@@ -9,6 +9,13 @@ on:
       docker-password:
         description: Container registry password or personal access token (if not using GitHub)
         required: false
+      telerik-license:
+        description: >
+          Telerik license key, exposed to the build as BuildKit secret
+          id=telerik_license. Telerik licenses at build time, so a project that
+          bakes it in needs no key at runtime. Optional; builds that do not mount
+          it are unaffected.
+        required: false
     inputs:
       context:
         # To set to a subdir, use format of "{{defaultContext}}:mysubdir"
@@ -121,6 +128,7 @@ jobs:
           # in the caller job's permissions so GITHUB_TOKEN can read the org feed.
           secrets: |
             github_packages_token=${{ secrets.GITHUB_TOKEN }}
+            telerik_license=${{ secrets.telerik-license }}
           cache-from: type=registry,ref=${{ inputs.registry }}/${{ inputs.image-name }}:buildcache
           cache-to: type=registry,ref=${{ inputs.registry }}/${{ inputs.image-name }}:buildcache,mode=max
 
