@@ -8,7 +8,7 @@ on:
         default: linux
       runs-on-windows:
         type: string
-        default: self-hosted
+        default: windows
       sparse-checkout:
         type: string
         required: false
@@ -38,8 +38,6 @@ on:
         default: false
 
 env:
-  DOTNET_INSTALL_DIR: "./.dotnet"
-  DOTNET_CLI_HOME: "/tmp"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   CI: 1
 
@@ -78,6 +76,11 @@ jobs:
   build-dotnet-core:
     if: inputs.dotnet-project-path != ''
     runs-on: ${{ inputs.runs-on }}
+    env:
+      # Linux-only. The k8s runners cannot write to the default SDK location,
+      # and these paths are meaningless on the Windows framework runners.
+      DOTNET_INSTALL_DIR: "./.dotnet"
+      DOTNET_CLI_HOME: "/tmp"
     steps:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v6
@@ -112,6 +115,15 @@ jobs:
         uses: actions/checkout@v6
         with:
           sparse-checkout: ${{ inputs.sparse-checkout }}
+
+      # The solution mixes .NET Framework projects with SDK-style ones, so
+      # restore has to resolve Microsoft.NET.Sdk. MSBuild finds that through a
+      # real .NET SDK on PATH, not through Visual Studio Build Tools, and the
+      # version has to satisfy global.json or the resolve fails outright.
+      - name: ⚙️ Setup Dotnet
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
 
       - name: ⚙️ Setup MSBuild
         uses: microsoft/setup-msbuild@v3
