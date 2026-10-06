@@ -15,6 +15,21 @@ on:
       argocd-app-name:
         required: true
         type: string
+      image-tag:
+        description: >
+          Tag of the image this run built. When set, the preview is only
+          reported ready once ArgoCD is running this tag. Without it, a
+          preview still healthy on the previous push counts as ready.
+        type: string
+        default: ''
+      label:
+        description: PR label that keeps this preview deployed.
+        type: string
+        default: preview-web
+      ttl:
+        description: How long the preview lives before it is expired, as shown in the comment.
+        type: string
+        default: 72 hours
       runs-on:
         type: string
         default: linux
@@ -40,38 +55,34 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
       - name: Post "Deploying" comment
-        uses: actions/github-script@v9
+        uses: oncoursesystems/workflows/.github/actions/pr-preview-comment@main
         with:
           github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ inputs.pr-number }},
-              body: [
-                '## Preview Deployment Starting',
-                '',
-                `**App:** \`${{ inputs.app-name }}\``,
-                `**PR:** #${{ inputs.pr-number }}`,
-                '',
-                'Building image and waiting for ArgoCD sync. This typically takes 3-7 minutes.',
-                '',
-                `Preview URL (once healthy): ${{ inputs.preview-url }}`,
-                '',
-                '---',
-                '_Bot commands: `/preview-status`, `/preview-redeploy`, `/preview-destroy`_',
-              ].join('\n')
-            });
+          pr-number: ${{ inputs.pr-number }}
+          app-name: ${{ inputs.app-name }}
+          body: |
+            ## Preview Deployment Starting
+
+            **App:** `${{ inputs.app-name }}`
+            ${{ inputs.image-tag != '' && format('**Image:** `{0}`', inputs.image-tag) || '' }}
+
+            Waiting for ArgoCD to roll out the new image. This typically takes 3-7 minutes.
+
+            Preview URL (once healthy): ${{ inputs.preview-url }}
+
+            ---
+            _Bot commands: `/preview-status`, `/preview-redeploy`, `/preview-destroy`_
 
       - name: Poll ArgoCD for Healthy+Synced
         id: poll
         env:
           ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          APP: ${{ inputs.argocd-app-name }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
         run: |
           MAX_ATTEMPTS=24
           SLEEP=30
-          APP="${{ inputs.argocd-app-name }}"
           for i in $(seq 1 $MAX_ATTEMPTS); do
             RESPONSE=$(curl -sf \
               -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
@@ -79,8 +90,16 @@ jobs:
               2>/dev/null || echo '{}')
             HEALTH=$(echo "$RESPONSE" | jq -r '.status.health.status // "Unknown"')
             SYNC=$(echo "$RESPONSE" | jq -r '.status.sync.status // "Unknown"')
-            echo "Attempt $i/$MAX_ATTEMPTS: health=${HEALTH} sync=${SYNC}"
-            if [ "$HEALTH" = "Healthy" ] && [ "$SYNC" = "Synced" ]; then
+            IMAGES=$(echo "$RESPONSE" | jq -r '.status.summary.images // [] | join(",")')
+            # Healthy+Synced alone is already true before ArgoCD picks up the
+            # new commit, so also require the image this run built.
+            ROLLED_OUT=true
+            if [ -n "$IMAGE_TAG" ]; then
+              ROLLED_OUT=$(echo "$RESPONSE" | jq --arg tag ":${IMAGE_TAG}" \
+                '[.status.summary.images[]? | select(endswith($tag))] | length > 0')
+            fi
+            echo "Attempt $i/$MAX_ATTEMPTS: health=${HEALTH} sync=${SYNC} rolled_out=${ROLLED_OUT} images=${IMAGES}"
+            if [ "$HEALTH" = "Healthy" ] && [ "$SYNC" = "Synced" ] && [ "$ROLLED_OUT" = "true" ]; then
               echo "outcome=healthy" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -90,42 +109,40 @@ jobs:
 
       - name: Post "Ready" comment
         if: steps.poll.outputs.outcome == 'healthy'
-        uses: actions/github-script@v9
+        uses: oncoursesystems/workflows/.github/actions/pr-preview-comment@main
         with:
           github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ inputs.pr-number }},
-              body: [
-                '## Preview Deployment Ready',
-                '',
-                `**URL:** ${{ inputs.preview-url }}`,
-                '',
-                'Automatically destroyed when the PR is closed, `deploy-preview` label is removed, or after 72 hours.',
-                '',
-                '---',
-                '_Bot commands: `/preview-status`, `/preview-redeploy`, `/preview-destroy`_',
-              ].join('\n')
-            });
+          pr-number: ${{ inputs.pr-number }}
+          app-name: ${{ inputs.app-name }}
+          body: |
+            ## Preview Deployment Ready
+
+            **App:** `${{ inputs.app-name }}`
+            ${{ inputs.image-tag != '' && format('**Image:** `{0}`', inputs.image-tag) || '' }}
+            **URL:** ${{ inputs.preview-url }}
+
+            Automatically destroyed when the PR is closed, the `${{ inputs.label }}` label is removed, or after ${{ inputs.ttl }}.
+
+            ---
+            _Bot commands: `/preview-status`, `/preview-redeploy`, `/preview-destroy`_
 
       - name: Post "Timeout" comment
         if: steps.poll.outputs.outcome == 'timeout'
-        uses: actions/github-script@v9
+        uses: oncoursesystems/workflows/.github/actions/pr-preview-comment@main
         with:
           github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ inputs.pr-number }},
-              body: [
-                '## Preview Deployment Timeout',
-                '',
-                'The deployment did not become healthy within 12 minutes.',
-                `Check ArgoCD: https://${{ secrets.ARGOCD_SERVER }}/applications/${{ inputs.argocd-app-name }}`,
-                '',
-                'Common causes: image build still in progress, or chart misconfiguration.',
-              ].join('\n')
-            });
+          pr-number: ${{ inputs.pr-number }}
+          app-name: ${{ inputs.app-name }}
+          body: |
+            ## Preview Deployment Timeout
+
+            **App:** `${{ inputs.app-name }}`
+            ${{ inputs.image-tag != '' && format('**Image:** `{0}`', inputs.image-tag) || '' }}
+
+            The deployment did not become healthy within 12 minutes.
+            Check ArgoCD: https://${{ secrets.ARGOCD_SERVER }}/applications/${{ inputs.argocd-app-name }}
+
+            Common causes: image pull still backing off, or chart misconfiguration.
+
+            ---
+            _Bot commands: `/preview-status`, `/preview-redeploy`, `/preview-destroy`_

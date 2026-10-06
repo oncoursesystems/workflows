@@ -1,0 +1,45 @@
+name: PR preview comment
+description: >
+  Create or update the one status comment a PR preview owns. The comment is
+  found by a hidden per-app marker, so each app's preview keeps a single
+  comment that shows its current state instead of a new comment per event.
+
+inputs:
+  github-token:
+    description: Token used to read and write PR comments.
+    required: true
+  pr-number:
+    description: Pull request number.
+    required: true
+  app-name:
+    description: Preview app name. Each app gets its own comment.
+    required: true
+  body:
+    description: Markdown body of the comment.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v9
+      env:
+        PR_NUMBER: ${{ inputs.pr-number }}
+        APP_NAME: ${{ inputs.app-name }}
+        BODY: ${{ inputs.body }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const issue_number = Number(process.env.PR_NUMBER);
+          const marker = `<!-- pr-preview:${process.env.APP_NAME} -->`;
+          const body = `${marker}\n${process.env.BODY}`;
+          const comments = await github.paginate(github.rest.issues.listComments, {
+            ...context.repo,
+            issue_number,
+            per_page: 100,
+          });
+          const existing = comments.find(c => c.user?.type === 'Bot' && c.body?.startsWith(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+          } else {
+            await github.rest.issues.createComment({ ...context.repo, issue_number, body });
+          }
