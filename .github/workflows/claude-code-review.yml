@@ -122,14 +122,6 @@ jobs:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
-      - name: Cleanup previous code reviews
-        uses: oncoursesystems/workflows/.github/actions/claude-review-cleanup@main
-        with:
-          github-token: ${{ steps.bot-token.outputs.token || github.token }}
-          pr-number: ${{ needs.select-model.outputs.pr-number }}
-          heading: "## Code Review"
-          clear-legacy: "true"
-
       - name: Run Claude Code Review
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -214,11 +206,20 @@ jobs:
             --title "$(jq -r .title <<< "$REVIEW")" \
             --body "$(jq -r .description <<< "$REVIEW")"
 
+      - name: Cleanup previous code reviews
+        uses: oncoursesystems/workflows/.github/actions/claude-review-cleanup@main
+        with:
+          github-token: ${{ steps.bot-token.outputs.token || github.token }}
+          pr-number: ${{ needs.select-model.outputs.pr-number }}
+          heading: "## Code Review"
+          clear-legacy: "true"
+
       - name: Post code review
         uses: oncoursesystems/workflows/.github/actions/claude-review-post@main
         with:
           github-token: ${{ steps.bot-token.outputs.token || github.token }}
           pr-number: ${{ needs.select-model.outputs.pr-number }}
+          base-ref: ${{ needs.select-model.outputs.base-ref }}
           commit-sha: ${{ needs.select-model.outputs.head-sha }}
           heading: "## Code Review"
           review: ${{ steps.claude.outputs.structured_output }}

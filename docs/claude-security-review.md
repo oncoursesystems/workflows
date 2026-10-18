@@ -139,11 +139,11 @@ jobs:
 
 1. **Model selection**: Fetches the PR's line count via the GitHub API. If `anthropic-model` is set, uses that. Otherwise, picks `small-pr-model` or `large-pr-model` based on the `small-pr-threshold`.
 
-2. **Old review cleanup**: Deletes the inline comments of previous bot reviews that start with "## Security Review", which removes their threads, and hides the old reviews as outdated. It only touches security reviews, so it never races the code review workflow.
+2. **Security analysis**: Claude reads the diff, then reads the full source files for any changed files that handle user input, authentication, database queries, or external APIs. It checks existing codebase patterns before flagging deviations.
 
-3. **Security analysis**: Claude reads the diff, then reads the full source files for any changed files that handle user input, authentication, database queries, or external APIs. It checks existing codebase patterns before flagging deviations.
+3. **Review posting**: Claude returns its findings with severity prefixes **[CRITICAL]**, **[HIGH]**, **[MEDIUM]**, or **[LOW]**. A workflow step then posts them as one GitHub Pull Request Review.
 
-4. **Review posting**: Claude returns its findings with severity prefixes **[CRITICAL]**, **[HIGH]**, **[MEDIUM]**, or **[LOW]**. A workflow step then posts them as one GitHub Pull Request Review.
+4. **Old review cleanup**: Runs after Claude finishes and just before the new review posts. Deletes the inline comments of previous bot reviews that start with "## Security Review", which removes their threads, and hides the old reviews as outdated. It only touches security reviews, so it never races the code review workflow. If Claude fails, the old reviews stay visible.
 
 ## Review Categories
 

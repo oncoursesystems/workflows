@@ -154,11 +154,11 @@ jobs:
 
 1. **Model selection**: Fetches the PR's line count via the GitHub API. If `anthropic-model` is set, uses that. Otherwise, picks `small-pr-model` or `large-pr-model` based on the `small-pr-threshold`.
 
-2. **Old review cleanup**: Deletes the inline comments of previous bot reviews that start with "## Code Review", which removes their threads, and hides the old reviews as outdated. GitHub cannot dismiss a review that only comments, so hiding is what keeps them from piling up. This job also clears older stray bot reviews that carry neither review heading.
+2. **PR title/description**: Claude reads the diff and writes a concise title (preserving any leading ticket number) and a structured description with summary, files changed, DB changes, dev notes, breaking changes, and test plan sections. A workflow step applies them to the PR.
 
-3. **PR title/description**: Claude reads the diff and writes a concise title (preserving any leading ticket number) and a structured description with summary, files changed, DB changes, dev notes, breaking changes, and test plan sections. A workflow step applies them to the PR.
+3. **Code review**: Claude reads the diff and the PR head's source files, then returns its findings with severity prefixes **Bug**, **Performance**, **Style**, or **Suggestion**. A workflow step posts them as one GitHub Pull Request Review.
 
-4. **Code review**: Claude reads the diff and the PR head's source files, then returns its findings with severity prefixes **Bug**, **Performance**, **Style**, or **Suggestion**. A workflow step posts them as one GitHub Pull Request Review.
+4. **Old review cleanup**: Runs after Claude finishes and just before the new review posts. Deletes the inline comments of previous bot reviews that start with "## Code Review", which removes their threads, and hides the old reviews as outdated. GitHub cannot dismiss a review that only comments, so hiding is what keeps them from piling up. This job also clears older stray bot reviews that carry neither review heading. If Claude fails, the old reviews stay visible.
 
 ## Review Scope
 

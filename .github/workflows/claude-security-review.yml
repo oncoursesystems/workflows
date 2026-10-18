@@ -122,13 +122,6 @@ jobs:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
-      - name: Cleanup previous security reviews
-        uses: oncoursesystems/workflows/.github/actions/claude-review-cleanup@main
-        with:
-          github-token: ${{ steps.bot-token.outputs.token || github.token }}
-          pr-number: ${{ needs.select-model.outputs.pr-number }}
-          heading: "## Security Review"
-
       - name: Run Claude Security Review
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -214,11 +207,19 @@ jobs:
             --allowed-tools "${{ inputs.allowed-tools }}"
             --json-schema '{"type":"object","additionalProperties":false,"required":["summary","comments"],"properties":{"summary":{"type":"string"},"comments":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","line","body"],"properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}}}}}}'
 
+      - name: Cleanup previous security reviews
+        uses: oncoursesystems/workflows/.github/actions/claude-review-cleanup@main
+        with:
+          github-token: ${{ steps.bot-token.outputs.token || github.token }}
+          pr-number: ${{ needs.select-model.outputs.pr-number }}
+          heading: "## Security Review"
+
       - name: Post security review
         uses: oncoursesystems/workflows/.github/actions/claude-review-post@main
         with:
           github-token: ${{ steps.bot-token.outputs.token || github.token }}
           pr-number: ${{ needs.select-model.outputs.pr-number }}
+          base-ref: ${{ needs.select-model.outputs.base-ref }}
           commit-sha: ${{ needs.select-model.outputs.head-sha }}
           heading: "## Security Review"
           review: ${{ steps.claude.outputs.structured_output }}
