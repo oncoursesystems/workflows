@@ -109,7 +109,7 @@ jobs:
       HAS_BOT_APP: ${{ secrets.GH_APP_ID != '' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.select-model.outputs.head-sha }}
           fetch-depth: 0

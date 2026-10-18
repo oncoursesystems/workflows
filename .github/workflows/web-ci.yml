@@ -47,7 +47,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: ${{ inputs.sparse-checkout }}
 
@@ -83,7 +83,7 @@ jobs:
       DOTNET_CLI_HOME: "/tmp"
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: ${{ inputs.sparse-checkout }}
 
@@ -112,7 +112,7 @@ jobs:
     runs-on: ${{ inputs.runs-on-windows }}
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: ${{ inputs.sparse-checkout }}
 
