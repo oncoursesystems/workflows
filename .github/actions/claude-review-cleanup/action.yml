@@ -1,0 +1,74 @@
+name: Claude review cleanup
+description: >
+  Clear out the previous Claude reviews of one kind before a new one is posted.
+  It deletes their inline comments, which removes their threads, and hides each
+  old review as outdated. GitHub cannot dismiss a COMMENTED review, so hiding is
+  what keeps old reviews from piling up on the PR.
+
+inputs:
+  github-token:
+    description: Token used to read and change the PR reviews.
+    required: true
+  pr-number:
+    description: Pull request number.
+    required: true
+  heading:
+    description: First line of the reviews to clear, such as "## Code Review".
+    required: true
+  clear-legacy:
+    description: >
+      Also clear claude[bot] and github-actions[bot] reviews that start with
+      neither review heading. Older runs posted inline comments as empty reviews
+      and other stray reviews. Only one
+      of the two review workflows should set this, so they never race on the
+      same reviews.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v9
+      env:
+        PR_NUMBER: ${{ inputs.pr-number }}
+        HEADING: ${{ inputs.heading }}
+        CLEAR_LEGACY: ${{ inputs.clear-legacy }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const { repository } = await github.graphql(
+            `query($owner: String!, $repo: String!, $pr: Int!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $pr) {
+                  reviews(first: 100) {
+                    nodes { id body isMinimized author { __typename login } comments(first: 100) { nodes { databaseId } } }
+                  }
+                }
+              }
+            }`,
+            { ...context.repo, pr: Number(process.env.PR_NUMBER) }
+          );
+          const pr = repository.pullRequest;
+
+          const legacyBots = new Set(['claude', 'github-actions']);
+          const headings = ['## Code Review', '## Security Review'];
+          const isLegacy = (r) =>
+            legacyBots.has(r.author.login) && !headings.some((h) => r.body.startsWith(h));
+          const owned = pr.reviews.nodes.filter(
+            (r) =>
+              r.author?.__typename === 'Bot' &&
+              (r.body.startsWith(process.env.HEADING) ||
+                (process.env.CLEAR_LEGACY === 'true' && isLegacy(r)))
+          );
+          for (const review of owned) {
+            for (const comment of review.comments.nodes) {
+              await github.rest.pulls.deleteReviewComment({ ...context.repo, comment_id: comment.databaseId });
+            }
+            if (!review.isMinimized) {
+              await github.graphql(
+                'mutation($id: ID!) { minimizeComment(input: { subjectId: $id, classifier: OUTDATED }) { minimizedComment { isMinimized } } }',
+                { id: review.id }
+              );
+            }
+          }
+          core.info(`Cleared ${owned.length} previous reviews`);

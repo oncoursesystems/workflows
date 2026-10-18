@@ -25,6 +25,8 @@ jobs:
     #   plugins: "thayer-code-agent@thayer-code-agent"
     secrets:
       CLAUDE_TOKEN: ${{ secrets.CLAUDE_TOKEN }}
+      GH_APP_ID: ${{ secrets.GH_APP_ID }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
       # Uncomment for private plugin registries:
       # PLUGIN_MARKETPLACE_AUTH: "https://x-access-token:${{ secrets.PLUGIN_REGISTRY_TOKEN }}@github.com/YourOrg/your-registry.git"
 
@@ -37,3 +39,5 @@ jobs:
     uses: oncoursesystems/workflows/.github/workflows/claude-security-review.yml@main
     secrets:
       CLAUDE_TOKEN: ${{ secrets.CLAUDE_TOKEN }}
+      GH_APP_ID: ${{ secrets.GH_APP_ID }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}

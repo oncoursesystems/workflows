@@ -12,8 +12,9 @@ This depends on the following actions:
 
 - **Smart model selection**: Automatically picks a smaller model for small PRs and a larger model for big PRs (configurable threshold and models, or override with a specific model)
 - **Severity ratings**: Findings are rated CRITICAL, HIGH, MEDIUM, or LOW
-- **Inline review comments**: Posts findings as native GitHub PR review comments on specific lines
-- **Old review cleanup**: Automatically resolves previous security review threads and dismisses old reviews on each new push
+- **One review per run**: Claude returns its findings as structured output, and a workflow step posts them as a single GitHub PR review. Findings on lines the diff shows become inline comments. The rest are listed in the review body.
+- **Read-only Claude**: Claude can read the code and the PR but cannot post, comment, or edit anything on GitHub itself
+- **Old review cleanup**: Deletes the inline comments of previous security reviews, which removes their threads, and hides the old reviews as outdated on each run
 - **Plugin support**: Optional support for Claude Code plugins from public or private registries
 - **Custom instructions**: Append repo-specific security guidance via the `custom-prompt` input
 - **Scoped analysis**: Only reports security vulnerabilities — code quality, performance, and style issues are left to the [code review](claude-code-review.md) workflow
@@ -48,7 +49,9 @@ This depends on the following actions:
 
 **Optional** Tools allowed for Claude to use
 
-**Default** `Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*)`
+**Default** `Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)`
+
+Keep this list read-only. The workflow posts the review, so Claude needs no write access.
 
 ### `small-pr-threshold`
 
@@ -78,6 +81,14 @@ This depends on the following actions:
 
 **Optional** Authenticated plugin marketplace URL(s). Use for private registries that require a token.
 
+### `GH_APP_ID`
+
+**Optional** GitHub App ID. With `GH_APP_PRIVATE_KEY`, the workflow posts the review as that app, such as `oc-bot-ross[bot]`. Without it, the review posts as `github-actions[bot]`.
+
+### `GH_APP_PRIVATE_KEY`
+
+**Optional** Private key for the `GH_APP_ID` app.
+
 ## Usage
 
 ```yaml
@@ -103,6 +114,8 @@ jobs:
     uses: oncoursesystems/workflows/.github/workflows/claude-security-review.yml@main
     secrets:
       CLAUDE_TOKEN: ${{ secrets.CLAUDE_TOKEN }}
+      GH_APP_ID: ${{ secrets.GH_APP_ID }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
 ```
 
 ### With Custom Security Focus
@@ -126,11 +139,11 @@ jobs:
 
 1. **Model selection**: Fetches the PR's line count via the GitHub API. If `anthropic-model` is set, uses that. Otherwise, picks `small-pr-model` or `large-pr-model` based on the `small-pr-threshold`.
 
-2. **Old review cleanup**: Resolves any open review threads from previous bot reviews tagged "Security Review", then dismisses and deletes the old review submissions. Cleanup uses different tags than the code review workflow, so the two don't interfere.
+2. **Old review cleanup**: Deletes the inline comments of previous bot reviews that start with "## Security Review", which removes their threads, and hides the old reviews as outdated. It only touches security reviews, so it never races the code review workflow.
 
 3. **Security analysis**: Claude reads the diff, then reads the full source files for any changed files that handle user input, authentication, database queries, or external APIs. It checks existing codebase patterns before flagging deviations.
 
-4. **Review posting**: Submits a GitHub Pull Request Review with inline comments using severity prefixes: **[CRITICAL]**, **[HIGH]**, **[MEDIUM]**, **[LOW]**.
+4. **Review posting**: Claude returns its findings with severity prefixes **[CRITICAL]**, **[HIGH]**, **[MEDIUM]**, or **[LOW]**. A workflow step then posts them as one GitHub Pull Request Review.
 
 ## Review Categories
 

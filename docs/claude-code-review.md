@@ -12,8 +12,9 @@ This depends on the following actions:
 
 - **Smart model selection**: Automatically picks a smaller model for small PRs and a larger model for big PRs (configurable threshold and models, or override with a specific model)
 - **PR title/description updates**: Generates a descriptive title and structured description from the diff
-- **Inline review comments**: Posts findings as native GitHub PR review comments on specific lines
-- **Old review cleanup**: Automatically resolves previous review threads and dismisses old reviews on each new push
+- **One review per run**: Claude returns its findings as structured output, and a workflow step posts them as a single GitHub PR review. Findings on lines the diff shows become inline comments. The rest are listed in the review body.
+- **Read-only Claude**: Claude can read the code and the PR but cannot post, comment, or edit anything on GitHub itself
+- **Old review cleanup**: Deletes the inline comments of previous code reviews, which removes their threads, and hides the old reviews as outdated on each run
 - **Plugin support**: Optional support for Claude Code plugins from public or private registries
 - **Custom instructions**: Append repo-specific review guidance via the `custom-prompt` input
 
@@ -47,7 +48,9 @@ This depends on the following actions:
 
 **Optional** Tools allowed for Claude to use
 
-**Default** `Read,Grep,Glob,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr edit:*),Bash(gh api:*)`
+**Default** `Read,Grep,Glob,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)`
+
+Keep this list read-only. The workflow posts the review and updates the PR, so Claude needs no write access.
 
 ### `small-pr-threshold`
 
@@ -77,6 +80,14 @@ This depends on the following actions:
 
 **Optional** Authenticated plugin marketplace URL(s). Use for private registries that require a token (e.g., `https://x-access-token:<token>@github.com/Org/registry.git`).
 
+### `GH_APP_ID`
+
+**Optional** GitHub App ID. With `GH_APP_PRIVATE_KEY`, the workflow posts the review as that app, such as `oc-bot-ross[bot]`. Without it, the review posts as `github-actions[bot]`.
+
+### `GH_APP_PRIVATE_KEY`
+
+**Optional** Private key for the `GH_APP_ID` app.
+
 ## Usage
 
 ```yaml
@@ -102,6 +113,8 @@ jobs:
     uses: oncoursesystems/workflows/.github/workflows/claude-code-review.yml@main
     secrets:
       CLAUDE_TOKEN: ${{ secrets.CLAUDE_TOKEN }}
+      GH_APP_ID: ${{ secrets.GH_APP_ID }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
 ```
 
 ### With Custom Options
@@ -141,11 +154,11 @@ jobs:
 
 1. **Model selection**: Fetches the PR's line count via the GitHub API. If `anthropic-model` is set, uses that. Otherwise, picks `small-pr-model` or `large-pr-model` based on the `small-pr-threshold`.
 
-2. **Old review cleanup**: Resolves any open review threads from previous bot reviews tagged "Code Review", then dismisses and deletes the old review submissions. This keeps the PR timeline clean on each new push.
+2. **Old review cleanup**: Deletes the inline comments of previous bot reviews that start with "## Code Review", which removes their threads, and hides the old reviews as outdated. GitHub cannot dismiss a review that only comments, so hiding is what keeps them from piling up. This job also clears older stray bot reviews that carry neither review heading.
 
-3. **PR title/description update**: Claude reads the diff and generates a concise title (preserving any leading ticket number) and a structured description with summary, files changed, DB changes, dev notes, breaking changes, and test plan sections.
+3. **PR title/description**: Claude reads the diff and writes a concise title (preserving any leading ticket number) and a structured description with summary, files changed, DB changes, dev notes, breaking changes, and test plan sections. A workflow step applies them to the PR.
 
-4. **Code review**: Claude reads the diff and relevant source files, then submits a GitHub Pull Request Review with inline comments on specific lines. Findings use severity prefixes: **Bug**, **Performance**, **Style**, **Suggestion**.
+4. **Code review**: Claude reads the diff and the PR head's source files, then returns its findings with severity prefixes **Bug**, **Performance**, **Style**, or **Suggestion**. A workflow step posts them as one GitHub Pull Request Review.
 
 ## Review Scope
 
