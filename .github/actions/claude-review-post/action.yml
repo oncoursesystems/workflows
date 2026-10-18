@@ -1,0 +1,81 @@
+name: Claude review post
+description: >
+  Post a Claude review as one pull request review. Findings on lines the diff
+  shows become inline comments, and the rest are listed in the review body,
+  because GitHub rejects the whole review when any inline comment points
+  outside the diff.
+
+inputs:
+  github-token:
+    description: Token used to read the PR files and post the review.
+    required: true
+  pr-number:
+    description: Pull request number.
+    required: true
+  commit-sha:
+    description: The head commit that was reviewed. Inline comments anchor to it.
+    required: true
+  heading:
+    description: First line of the review body, such as "## Code Review".
+    required: true
+  review:
+    description: >
+      JSON object with "summary" (string) and "comments" (array of objects with
+      "path", "line", and "body").
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v9
+      env:
+        PR_NUMBER: ${{ inputs.pr-number }}
+        COMMIT_SHA: ${{ inputs.commit-sha }}
+        HEADING: ${{ inputs.heading }}
+        REVIEW: ${{ inputs.review }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const pull_number = Number(process.env.PR_NUMBER);
+          const { summary, comments } = JSON.parse(process.env.REVIEW);
+
+          const files = await github.paginate(github.rest.pulls.listFiles, {
+            ...context.repo,
+            pull_number,
+            per_page: 100,
+          });
+          const diffLines = new Map();
+          for (const file of files) {
+            const lines = new Set();
+            let line = 0;
+            for (const text of (file.patch ?? '').split('\n')) {
+              const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(text);
+              if (hunk) {
+                line = Number(hunk[1]);
+              } else if (text.startsWith('+') || text.startsWith(' ')) {
+                lines.add(line++);
+              }
+            }
+            diffLines.set(file.filename, lines);
+          }
+
+          const inline = comments.filter((c) => diffLines.get(c.path)?.has(c.line));
+          const outside = comments.filter((c) => !inline.includes(c));
+          const sections = [process.env.HEADING, summary];
+          if (outside.length > 0) {
+            sections.push(
+              '### Findings outside the diff\n\n' +
+                outside.map((c) => `- \`${c.path}:${c.line}\` ${c.body}`).join('\n')
+            );
+          }
+          sections.push('[bot] Generated with [Claude Code](https://claude.ai/claude-code)');
+
+          await github.rest.pulls.createReview({
+            ...context.repo,
+            pull_number,
+            commit_id: process.env.COMMIT_SHA,
+            event: 'COMMENT',
+            body: sections.join('\n\n'),
+            comments: inline.map((c) => ({ path: c.path, line: c.line, side: 'RIGHT', body: c.body })),
+          });
+          core.info(`Posted 1 review with ${inline.length} inline and ${outside.length} body findings`);

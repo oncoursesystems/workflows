@@ -25,7 +25,7 @@ on:
         type: string
         description: "Tools allowed for Claude to use"
         required: false
-        default: 'Read,Grep,Glob,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr edit:*),Bash(gh api:*)'
+        default: 'Read,Grep,Glob,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)'
       small-pr-threshold:
         type: number
         description: "Line change threshold for model selection. PRs at or above this use the large model."
@@ -48,6 +48,12 @@ on:
       PLUGIN_MARKETPLACE_AUTH:
         description: "Authenticated plugin marketplace URL(s). Use for private registries requiring a token."
         required: false
+      GH_APP_ID:
+        description: "GitHub App ID. With GH_APP_PRIVATE_KEY, the review posts as that app instead of github-actions[bot]."
+        required: false
+      GH_APP_PRIVATE_KEY:
+        description: "Private key for the GH_APP_ID app"
+        required: false
 
 permissions:
   contents: read
@@ -62,6 +68,7 @@ jobs:
       model: ${{ steps.pick-model.outputs.model }}
       pr-number: ${{ steps.pr-stats.outputs.pr-number }}
       base-ref: ${{ steps.pr-stats.outputs.base-ref }}
+      head-sha: ${{ steps.pr-stats.outputs.head-sha }}
     steps:
       - name: Get PR stats
         id: pr-stats
@@ -69,14 +76,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           PR_NUMBER=${{ github.event.pull_request.number || github.event.issue.number }}
-          STATS=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER} --jq '{additions, deletions, base_ref: .base.ref}')
+          STATS=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER} --jq '{additions, deletions, base_ref: .base.ref, head_sha: .head.sha}')
           ADDITIONS=$(echo "$STATS" | jq '.additions')
           DELETIONS=$(echo "$STATS" | jq '.deletions')
           TOTAL=$((ADDITIONS + DELETIONS))
           BASE_REF=$(echo "$STATS" | jq -r '.base_ref')
+          HEAD_SHA=$(echo "$STATS" | jq -r '.head_sha')
           echo "changed-lines=${TOTAL}" >> "$GITHUB_OUTPUT"
           echo "pr-number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           echo "base-ref=${BASE_REF}" >> "$GITHUB_OUTPUT"
+          echo "head-sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Pick model
         id: pick-model
@@ -96,70 +105,33 @@ jobs:
     concurrency:
       group: claude-code-review-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: true
+    env:
+      HAS_BOT_APP: ${{ secrets.GH_APP_ID != '' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          ref: ${{ needs.select-model.outputs.head-sha }}
           fetch-depth: 0
 
+      - name: Create bot token
+        id: bot-token
+        if: env.HAS_BOT_APP == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
       - name: Cleanup previous code reviews
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          OWNER="${{ github.repository_owner }}"
-          REPO="${{ github.event.repository.name }}"
-          PR=${{ needs.select-model.outputs.pr-number }}
-
-          # Resolve ALL open review threads left by the bot (code + security + orphaned empty-body reviews)
-          THREADS=$(gh api graphql -f query='
-            query($owner:String!, $repo:String!, $pr:Int!) {
-              repository(owner:$owner, name:$repo) {
-                pullRequest(number:$pr) {
-                  reviewThreads(first:100) {
-                    nodes {
-                      id
-                      isResolved
-                      comments(first:1) {
-                        nodes {
-                          author { login }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }' -f owner="$OWNER" -f repo="$REPO" -F pr="$PR" \
-            --jq '.data.repository.pullRequest.reviewThreads.nodes[]
-              | select(
-                  .isResolved == false
-                  and (.comments.nodes[0].author.login == "github-actions[bot]" or .comments.nodes[0].author.login == "claude[bot]")
-                )
-              | .id') || true
-
-          for THREAD_ID in $THREADS; do
-            gh api graphql -f query='
-              mutation($id:ID!) {
-                resolveReviewThread(input:{threadId:$id}) { thread { isResolved } }
-              }' -f id="$THREAD_ID" 2>/dev/null || true
-          done
-
-          # Delete all old bot reviews (code, security, orphaned inline-comment, and stray test reviews)
-          OLD_REVIEW_IDS=$(gh api "/repos/$OWNER/$REPO/pulls/$PR/reviews" --paginate \
-            --jq '.[]
-              | select(.user.login == "github-actions[bot]" or .user.login == "claude[bot]")
-              | .id') || true
-
-          for RID in $OLD_REVIEW_IDS; do
-            COMMENT_IDS=$(gh api "/repos/$OWNER/$REPO/pulls/$PR/reviews/${RID}/comments" --jq '.[].id' 2>/dev/null || true)
-            for CID in $COMMENT_IDS; do
-              gh api -X DELETE "/repos/$OWNER/$REPO/pulls/comments/${CID}" 2>/dev/null || true
-            done
-            gh api -X PUT "/repos/$OWNER/$REPO/pulls/$PR/reviews/${RID}/dismissals" \
-              -f message="Superseded by updated review" -f event="DISMISS" 2>/dev/null || true
-          done
+        uses: oncoursesystems/workflows/.github/actions/claude-review-cleanup@main
+        with:
+          github-token: ${{ steps.bot-token.outputs.token || github.token }}
+          pr-number: ${{ needs.select-model.outputs.pr-number }}
+          heading: "## Code Review"
+          clear-legacy: "true"
 
       - name: Run Claude Code Review
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_TOKEN }}
@@ -170,9 +142,9 @@ jobs:
             PR NUMBER: ${{ needs.select-model.outputs.pr-number }}
             BASE BRANCH: ${{ needs.select-model.outputs.base-ref }}
 
-            ## Task 1: Update PR Title and Description
+            ## Task 1: Write the PR Title and Description
 
-            First, analyze the changes in this PR and update the title and description:
+            First, analyze the changes in this PR and write a new title and description. Return them in the `title` and `description` fields of your structured output. Do not edit the PR yourself. The workflow applies them after you finish.
 
             1. Use `gh pr diff ${{ needs.select-model.outputs.pr-number }}` to see all changes
             2. Generate a concise, descriptive title (max 72 chars) that summarizes WHAT changed
@@ -186,10 +158,6 @@ jobs:
                - **Breaking Changes**: Document any breaking changes (or state "None")
                - **Test Plan**: 2-4 bullet points for testing the changes
 
-            4. Update the PR using:
-               ```
-               gh pr edit ${{ needs.select-model.outputs.pr-number }} --title "Your title" --body "Your description"
-               ```
 
             ## Task 2: Code Review
 
@@ -217,37 +185,40 @@ jobs:
 
             Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
 
-            ## Posting Your Review
+            ## Returning Your Review
 
-            Submit your review as a **GitHub Pull Request Review with inline line comments**. This provides the native GitHub code review UX where comments appear next to the relevant code.
+            Return the review in the `summary` and `comments` fields of your structured output. Do not post anything to GitHub yourself. The workflow posts it as one PR review after you finish.
 
-            Previous review threads have been resolved and old reviews deleted automatically.
-
-            ### Build and Submit Review
-            Create a JSON file with your review, then submit it:
-            ```bash
-            cat > /tmp/review.json << 'REVIEW_EOF'
-            {
-              "event": "COMMENT",
-              "body": "## Code Review\n\nYour overall summary here...\n\n[bot] Generated with [Claude Code](https://claude.ai/claude-code)",
-              "comments": [
-                {"path": "src/example.ts", "line": 42, "body": "**Bug**: Description here"},
-                {"path": "src/other.ts", "line": 15, "body": "**Suggestion**: Consider..."}
-              ]
-            }
-            REVIEW_EOF
-            gh api "/repos/${{ github.repository }}/pulls/${{ needs.select-model.outputs.pr-number }}/reviews" --input /tmp/review.json
-            ```
-
-            **Rules for inline comments:**
-            - `path`: File path relative to repo root (must appear in the diff)
-            - `line`: Line number in the **new version** of the file (right side of diff)
+            - `summary`: Your overall summary in Markdown. Do not add a heading or a footer. The workflow adds both.
+            - `comments`: One entry per finding.
+              - `path`: File path relative to repo root (must appear in the diff)
+              - `line`: Line number in the **new version** of the file (right side of diff)
+              - `body`: The finding, starting with a severity prefix: **Bug**, **Performance**, **Style**, **Suggestion**
             - Only comment on lines that are part of the PR diff (added or modified lines)
-            - Use severity prefixes: **Bug**, **Performance**, **Style**, **Suggestion**
-            - If no issues found, submit with an empty comments array and a positive summary
-            - Always end the review body with: "[bot] Generated with [Claude Code](https://claude.ai/claude-code)"
-            - **IMPORTANT**: Submit the review exactly ONCE. Do NOT make test or exploratory API calls to the reviews endpoint. Build the complete JSON file first, then submit it in a single call.
+            - If no issues found, return an empty `comments` array and a positive summary
 
             ${{ inputs.custom-prompt }}
 
-          claude_args: '--model ${{ needs.select-model.outputs.model }} --allowed-tools "${{ inputs.allowed-tools }}"'
+          claude_args: |
+            --model ${{ needs.select-model.outputs.model }}
+            --allowed-tools "${{ inputs.allowed-tools }}"
+            --json-schema '{"type":"object","additionalProperties":false,"required":["title","description","summary","comments"],"properties":{"title":{"type":"string"},"description":{"type":"string"},"summary":{"type":"string"},"comments":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","line","body"],"properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}}}}}}'
+
+      - name: Update PR title and description
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token || github.token }}
+          PR_NUMBER: ${{ needs.select-model.outputs.pr-number }}
+          REVIEW: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --title "$(jq -r .title <<< "$REVIEW")" \
+            --body "$(jq -r .description <<< "$REVIEW")"
+
+      - name: Post code review
+        uses: oncoursesystems/workflows/.github/actions/claude-review-post@main
+        with:
+          github-token: ${{ steps.bot-token.outputs.token || github.token }}
+          pr-number: ${{ needs.select-model.outputs.pr-number }}
+          commit-sha: ${{ needs.select-model.outputs.head-sha }}
+          heading: "## Code Review"
+          review: ${{ steps.claude.outputs.structured_output }}
