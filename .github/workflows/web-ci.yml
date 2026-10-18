@@ -88,7 +88,7 @@ jobs:
           sparse-checkout: ${{ inputs.sparse-checkout }}
 
       - name: ⚙️ Setup Dotnet
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           cache: true
@@ -121,7 +121,7 @@ jobs:
       # real .NET SDK on PATH, not through Visual Studio Build Tools, and the
       # version has to satisfy global.json or the resolve fails outright.
       - name: ⚙️ Setup Dotnet
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
