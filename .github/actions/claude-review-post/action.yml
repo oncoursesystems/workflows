@@ -12,6 +12,9 @@ inputs:
   pr-number:
     description: Pull request number.
     required: true
+  base-ref:
+    description: Base branch of the PR. The diff is taken from it to commit-sha.
+    required: true
   commit-sha:
     description: The head commit that was reviewed. Inline comments anchor to it.
     required: true
@@ -30,6 +33,7 @@ runs:
     - uses: actions/github-script@v9
       env:
         PR_NUMBER: ${{ inputs.pr-number }}
+        BASE_REF: ${{ inputs.base-ref }}
         COMMIT_SHA: ${{ inputs.commit-sha }}
         HEADING: ${{ inputs.heading }}
         REVIEW: ${{ inputs.review }}
@@ -39,11 +43,13 @@ runs:
           const pull_number = Number(process.env.PR_NUMBER);
           const { summary, comments } = JSON.parse(process.env.REVIEW);
 
-          const files = await github.paginate(github.rest.pulls.listFiles, {
+          const { data: { files } } = await github.rest.repos.compareCommitsWithBasehead({
             ...context.repo,
-            pull_number,
-            per_page: 100,
+            basehead: `${process.env.BASE_REF}...${process.env.COMMIT_SHA}`,
           });
+          if (files.length >= 300) {
+            core.warning('The diff lists 300 files, the compare API limit. Findings in files past it go in the review body.');
+          }
           const diffLines = new Map();
           for (const file of files) {
             const lines = new Set();

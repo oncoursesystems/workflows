@@ -40,7 +40,7 @@ runs:
             `query($owner: String!, $repo: String!, $pr: Int!) {
               repository(owner: $owner, name: $repo) {
                 pullRequest(number: $pr) {
-                  reviews(first: 100) {
+                  reviews(last: 100) {
                     nodes { id body isMinimized author { __typename login } comments(first: 100) { nodes { databaseId } } }
                   }
                 }
