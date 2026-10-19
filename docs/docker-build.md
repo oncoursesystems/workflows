@@ -57,6 +57,25 @@ type=raw,value={{tag}},priority=100
 type=raw,value=latest,enable={{is_default_branch}},priority=100
 ```
 
+### `build-secrets`
+
+**Optional** Newline-delimited `<buildkit-id>=<SECRET_NAME>` lines. Each line makes the caller secret `SECRET_NAME`
+available inside the build as the BuildKit secret `<buildkit-id>`, so a Dockerfile can mount it without baking it
+into a layer. The caller must pass `secrets: inherit`. The job fails when a named secret is missing or empty.
+
+For example, to pass a private npm registry token:
+
+```yaml
+    with:
+      build-secrets: npm_token=NPM_REGISTRY_TOKEN
+    secrets: inherit
+```
+
+```dockerfile
+RUN --mount=type=secret,id=npm_token,required=true \
+    NPM_TOKEN="$(cat /run/secrets/npm_token)" bun install --frozen-lockfile
+```
+
 ## Secrets
 
 ### `docker-username`

@@ -81,6 +81,20 @@ installs its SDK from it.
 
 **Default** `.`
 
+### `install-secrets`
+
+**Optional** Newline-delimited `<ENV_NAME>=<SECRET_NAME>` lines. Each line sets the caller secret `SECRET_NAME` as
+the environment variable `ENV_NAME` for the Node.js install only. The caller must pass `secrets: inherit`. The job
+fails when a named secret is missing or empty.
+
+For example, to pass a token to an `.npmrc` that reads `//npm.example.com/:_authToken=${NPM_TOKEN}`:
+
+```yaml
+    with:
+      install-secrets: NPM_TOKEN=NPM_REGISTRY_TOKEN
+    secrets: inherit
+```
+
 ## Environment Variables
 
 Set for every job:
