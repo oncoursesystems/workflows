@@ -75,28 +75,26 @@ jobs:
         working-directory: ${{ inputs.nodejs-project-path }}
         env:
           INSTALL_SECRETS: ${{ inputs.install-secrets }}
-          # A secret named at runtime has no static secrets.<name> reference, so this step alone
-          # reads the whole secrets context, and only when the caller opts in.
-          SECRETS_JSON: ${{ inputs.install-secrets != '' && toJSON(secrets) || '' }}
+          ALL_CALLER_SECRETS_JSON: ${{ inputs.install-secrets != '' && toJSON(secrets) || '' }}
         run: |
+          name_re='^[A-Za-z_][A-Za-z0-9_]*$'
           while read -r line; do
             [ -n "$line" ] || continue
             env_name="${line%%=*}"
             name="${line#*=}"
-            if [[ "$line" != *=* || ! "$env_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ || ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            if [[ "$line" != *=* || ! "$env_name" =~ $name_re || ! "$name" =~ $name_re ]]; then
               echo "::error::install-secrets line '$line' must look like <ENV_NAME>=<SECRET_NAME>"
               exit 1
             fi
             value="$(jq -jn --arg name "${name^^}" \
-              'env.SECRETS_JSON | fromjson | with_entries(.key |= ascii_upcase) | .[$name] // ""')"
+              'env.ALL_CALLER_SECRETS_JSON | fromjson | with_entries(.key |= ascii_upcase) | .[$name] // ""')"
             if [ -z "$value" ]; then
-              echo "::error::Secret $name is missing or empty. The caller must pass secrets: inherit and see the secret."
+              echo "::error::Secret $name is missing or empty. Pass secrets: inherit from a repo that can see it."
               exit 1
             fi
             export "$env_name=$value"
           done <<< "$INSTALL_SECRETS"
-          unset SECRETS_JSON
-          bun install --frozen-lockfile
+          env -u ALL_CALLER_SECRETS_JSON bun install --frozen-lockfile
 
       - name: 🚀 Bun run build
         working-directory: ${{ inputs.nodejs-project-path }}

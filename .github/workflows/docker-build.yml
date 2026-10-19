@@ -116,9 +116,7 @@ jobs:
         if: inputs.build-secrets != ''
         env:
           BUILD_SECRETS: ${{ inputs.build-secrets }}
-          # A secret named at runtime has no static secrets.<name> reference, so this step alone
-          # reads the whole secrets context.
-          SECRETS_JSON: ${{ toJSON(secrets) }}
+          ALL_CALLER_SECRETS_JSON: ${{ toJSON(secrets) }}
         run: |
           umask 077
           dir="$(mktemp -d "$RUNNER_TEMP/build-secrets.XXXXXX")"
@@ -132,9 +130,9 @@ jobs:
               exit 1
             fi
             jq -jn --arg name "${name^^}" \
-              'env.SECRETS_JSON | fromjson | with_entries(.key |= ascii_upcase) | .[$name] // ""' > "$dir/$id"
+              'env.ALL_CALLER_SECRETS_JSON | fromjson | with_entries(.key |= ascii_upcase) | .[$name] // ""' > "$dir/$id"
             if [ ! -s "$dir/$id" ]; then
-              echo "::error::Secret $name is missing or empty. The caller must pass secrets: inherit and see the secret."
+              echo "::error::Secret $name is missing or empty. Pass secrets: inherit from a repo that can see it."
               exit 1
             fi
             files+="$id=$dir/$id"$'\n'
