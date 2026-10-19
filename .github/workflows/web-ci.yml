@@ -36,6 +36,12 @@ on:
       dotnet-locked-mode:
         type: boolean
         default: false
+      install-secrets:
+        description: >-
+          Newline-delimited "<ENV_NAME>=<SECRET_NAME>" lines. Each named caller secret is set as that environment
+          variable for the Node.js install. Needs the caller to pass secrets: inherit.
+        type: string
+        default: ''
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
@@ -67,7 +73,28 @@ jobs:
 
       - name: 📦 Install dependencies
         working-directory: ${{ inputs.nodejs-project-path }}
-        run: bun install --frozen-lockfile
+        env:
+          INSTALL_SECRETS: ${{ inputs.install-secrets }}
+          ALL_CALLER_SECRETS_JSON: ${{ inputs.install-secrets != '' && toJSON(secrets) || '' }}
+        run: |
+          name_re='^[A-Za-z_][A-Za-z0-9_]*$'
+          while read -r line; do
+            [ -n "$line" ] || continue
+            env_name="${line%%=*}"
+            name="${line#*=}"
+            if [[ "$line" != *=* || ! "$env_name" =~ $name_re || ! "$name" =~ $name_re ]]; then
+              echo "::error::install-secrets line '$line' must look like <ENV_NAME>=<SECRET_NAME>"
+              exit 1
+            fi
+            value="$(jq -jn --arg name "${name^^}" \
+              'env.ALL_CALLER_SECRETS_JSON | fromjson | with_entries(.key |= ascii_upcase) | .[$name] // ""')"
+            if [ -z "$value" ]; then
+              echo "::error::Secret $name is missing or empty. Pass secrets: inherit from a repo that can see it."
+              exit 1
+            fi
+            export "$env_name=$value"
+          done <<< "$INSTALL_SECRETS"
+          env -u ALL_CALLER_SECRETS_JSON bun install --frozen-lockfile
 
       - name: 🚀 Bun run build
         working-directory: ${{ inputs.nodejs-project-path }}
