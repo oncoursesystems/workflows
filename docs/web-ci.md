@@ -108,6 +108,10 @@ to the Windows framework runners:
 - `DOTNET_INSTALL_DIR`: "./.dotnet" (Needed for k8s runner permissions)
 - `DOTNET_CLI_HOME`: "/tmp"
 
+## Dependency caching
+
+The Node.js job caches `~/.bun/install/cache`, and the .NET Core job caches the NuGet packages folder, through the Actions cache. A job skips that cache when the folder already holds files at the start of the job. VM runners keep these folders between jobs, so saving them only uploads gigabytes: over 11 GB of bun packages and about 4 GB of NuGet packages on oncourse-connect. Runners that start empty, such as k8s runners, still restore and save the cache.
+
 ## Usage
 
 ```yaml
