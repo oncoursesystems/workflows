@@ -62,8 +62,18 @@ jobs:
         with:
           bun-version: ${{ inputs.bun-version }}
 
+      - name: 🔎 Skip the bun Actions cache when the runner already holds the packages
+        id: warm-bun
+        shell: bash
+        run: |
+          dir="$HOME/.bun/install/cache"
+          if [ -d "$dir" ] && [ -n "$(ls -A "$dir")" ]; then
+            echo "warm=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: 🏦 Cache dependencies
         id: cache-bun
+        if: steps.warm-bun.outputs.warm != 'true'
         uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
@@ -114,11 +124,22 @@ jobs:
         with:
           sparse-checkout: ${{ inputs.sparse-checkout }}
 
+      - name: 🔎 Skip the NuGet Actions cache when the runner already holds the packages
+        id: warm-nuget
+        shell: bash
+        run: |
+          for dir in "$NUGET_PACKAGES" "$DOTNET_CLI_HOME/.nuget/packages" "$HOME/.nuget/packages"; do
+            if [ -n "$dir" ] && [ -d "$dir" ] && [ -n "$(ls -A "$dir")" ]; then
+              echo "warm=true" >> "$GITHUB_OUTPUT"
+              break
+            fi
+          done
+
       - name: ⚙️ Setup Dotnet
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
-          cache: true
+          cache: ${{ steps.warm-nuget.outputs.warm != 'true' }}
           cache-dependency-path: ${{ inputs.dotnet-project-path }}/**/*.csproj
 
       - name: 📦 Dotnet restore (locked mode)
