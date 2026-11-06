@@ -1,0 +1,29 @@
+name: Risk tier
+description: >
+  Classify a pull request as low, medium, or high risk from the review policy
+  on its base branch, its size, and Jev's judgment of the diff. Publishes the
+  tier as a risk label and a neutral risk-tier check. Blocks nothing.
+
+inputs:
+  github-token:
+    description: Token used to read the pull request and the policy, set labels, and create the check run.
+    required: true
+  typesafe-api-key:
+    description: TypeSafe API key for Jev.
+    required: true
+  policy-path:
+    description: Path of the review policy, read from the pull request's base branch.
+    required: false
+    default: review-policy.yml
+  jev-model:
+    description: Jev model ID. Pin a version, because the flag thresholds are tuned per version.
+    required: false
+    default: jev-1.14.0
+
+outputs:
+  tier:
+    description: The risk tier, low, medium, or high. Empty for a draft pull request.
+
+runs:
+  using: node24
+  main: dist/index.js

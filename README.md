@@ -21,6 +21,7 @@ The web workflow is designed to build and publish Docker images to a registry an
 - [docker-build](.github/workflows/docker-build.yml) ([docs](docs/docker-build.md)) - Builds a Docker image and pushes it to a registry
 - [e2e-testing](.github/workflows/e2e-testing.yml) ([docs](docs/e2e-testing.md)) - Agentic E2E UI testing using Claude AI and agent-browser
 - [pr-preview](.github/workflows/pr-preview.yml) ([docs](docs/pr-preview.md)) - Deploys a PR preview build to a kubernetes cluster
+- [risk-tier](.github/actions/risk-tier/action.yml) ([docs](docs/risk-tier.md)) - Classifies a pull request as low, medium, or high risk and publishes the tier as a label and a check
 - [web-cd](.github/workflows/web-cd.yml) ([docs](docs/web-cd.md)) - Manages publishing a web application release
 - [web-ci](.github/workflows/web-ci.yml) ([docs](docs/web-ci.md)) - Manages building of a web application during the development lifecycle
 

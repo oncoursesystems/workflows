@@ -1,0 +1,30 @@
+{
+  "name": "@oncoursesystems/ai-review",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-first code review for OnCourse pull requests",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --maxWorkers=2",
+    "build": "esbuild src/risk/action.ts --bundle --platform=node --target=node22 --format=cjs --outfile=../.github/actions/risk-tier/dist/index.js",
+    "risk": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/risk/cli.ts"
+  },
+  "dependencies": {
+    "@actions/core": "3.0.1",
+    "@actions/github": "9.1.1",
+    "picomatch": "4.0.7",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "@types/picomatch": "4.0.3",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}

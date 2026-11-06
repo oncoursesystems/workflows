@@ -1,0 +1,51 @@
+name: ai-review-ci
+
+on:
+  pull_request:
+    paths:
+      - "ai-review/**"
+      - ".github/actions/risk-tier/**"
+      - ".github/workflows/ai-review-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ai-review/**"
+      - ".github/actions/risk-tier/**"
+      - ".github/workflows/ai-review-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-review
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ai-review/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Check the committed bundle is current
+        run: |
+          git add --intent-to-add -- ../.github/actions/risk-tier/dist
+          git diff --exit-code -- ../.github/actions/risk-tier/dist
