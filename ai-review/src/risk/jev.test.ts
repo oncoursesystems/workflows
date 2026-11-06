@@ -156,6 +156,37 @@ describe('askJev', () => {
         expect(JSON.stringify(state).length).toBeLessThanOrEqual(STATE_BUDGET_CHARS + 100);
     });
 
+    it('lists only the files that fit when the file list alone is too large', async () => {
+        const calls: Call[] = [];
+        const files = Array.from({ length: 20_000 }, (_, i) => file(`src/Legacy/Project/Folder${i}/File${i}.cs`, '-x'));
+        const result = await askJev(pr(files), noIgnore, options([json(200, goodBody)], calls, []));
+        const state = calls[0]?.body['state'] as { files: unknown[]; files_truncated?: string };
+        expect(result.status).toBe('answered');
+        expect(calls).toHaveLength(1);
+        expect(JSON.stringify(state).length).toBeLessThanOrEqual(STATE_BUDGET_CHARS + 200);
+        expect(state.files_truncated).toBe(`${state.files.length} of 20000 files listed`);
+    });
+
+    it('halves the file list on each retry while the context is still exceeded', async () => {
+        const calls: Call[] = [];
+        const files = Array.from({ length: 20_000 }, (_, i) => file(`src/Legacy/Project/Folder${i}/File${i}.cs`, '-x'));
+        const tooLong = () => json(400, { detail: { error: 'max_tokens_exceeded' } });
+        const result = await askJev(pr(files), noIgnore, options([tooLong(), tooLong(), tooLong(), json(200, goodBody)], calls, []));
+        const listed = calls.map((call) => (call.body['state'] as { files: unknown[] }).files.length);
+        expect(result.status).toBe('answered');
+        expect(listed[1]).toBe(listed[0]);
+        expect(listed[2]).toBeLessThan(listed[1]! * 0.6);
+        expect(listed[3]).toBeLessThan(listed[2]! * 0.6);
+    });
+
+    it('lists every file without a truncation note when they fit', async () => {
+        const calls: Call[] = [];
+        await askJev(pr([file('a.js', '+a'), file('b.js', '+b')]), noIgnore, options([json(200, goodBody)], calls, []));
+        const state = calls[0]?.body['state'] as { files: unknown[]; files_truncated?: string };
+        expect(state.files).toHaveLength(2);
+        expect(state).not.toHaveProperty('files_truncated');
+    });
+
     it('retries 429 and 529 honoring retry-after, then succeeds', async () => {
         const calls: Call[] = [];
         const sleeps: number[] = [];
@@ -178,6 +209,21 @@ describe('askJev', () => {
         );
         expect(calls).toHaveLength(3);
         expect(result).toEqual({ status: 'failed', error: expect.stringContaining('HTTP 529') });
+    });
+
+    it('drops a token-dense file but keeps the rest of the diff when the context is exceeded', async () => {
+        const calls: Call[] = [];
+        const tooLong = () => json(400, { detail: { error: 'max_tokens_exceeded' } });
+        const result = await askJev(
+            pr([file('AppHost.cs', '+small-route'), file('webfont.css', `-${'\\e900;'.repeat(9_000)}`)]),
+            noIgnore,
+            options([tooLong(), json(200, goodBody)], calls, []),
+        );
+        const secondDiff = (calls[1]?.body['state'] as { diff: string }).diff;
+        expect(secondDiff).toContain('+small-route');
+        expect(secondDiff).not.toContain('\\e900;');
+        expect(secondDiff).toContain('[diff truncated: 1 of 2 files shown]');
+        expect(result.status === 'answered' && result.verdict.diff).toBe('truncated');
     });
 
     it('retries once without the diff when the context is exceeded', async () => {
