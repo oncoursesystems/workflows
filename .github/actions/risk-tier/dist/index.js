@@ -53742,16 +53742,7 @@ var RISK_LABELS = {
   medium: { name: "risk:medium", color: "fbca04", description: "Risk tier: medium" },
   high: { name: "risk:high", color: "d93f0b", description: "Risk tier: high" }
 };
-var FEEDBACK_COLOR = "ededed";
-var FEEDBACK_LABELS = [
-  { name: "risk-ok", color: FEEDBACK_COLOR, description: "The risk tier looks right" },
-  ...TIERS.map((tier) => ({
-    name: `risk-should-be:${tier}`,
-    color: FEEDBACK_COLOR,
-    description: `The risk tier should be ${tier}`
-  }))
-];
-var ALL_LABELS = [...TIERS.map((tier) => RISK_LABELS[tier]), ...FEEDBACK_LABELS];
+var ALL_LABELS = TIERS.map((tier) => RISK_LABELS[tier]);
 function reconcileRiskLabels(current, tier) {
   const wanted = RISK_LABELS[tier].name;
   const stale = TIERS.map((t) => RISK_LABELS[t].name).filter((name) => name !== wanted);
@@ -53810,8 +53801,6 @@ function renderSummary(classification) {
     "### Jev",
     "",
     ...jevSection(jev),
-    "",
-    "Agree? Add the `risk-ok` label. Disagree? Add `risk-should-be:low`, `risk-should-be:medium` or `risk-should-be:high`.",
     ""
   ].join("\n");
 }

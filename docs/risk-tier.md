@@ -8,7 +8,6 @@ The action classifies each pull request as low, medium, or high risk and publish
 
 - **Risk label**: Sets exactly one of `risk:low`, `risk:medium`, or `risk:high` on the pull request and removes the other two. Reruns converge on the same labels.
 - **Check run**: Creates a `risk-tier` check on the head commit. Its summary lists the tier, every reason that raised it, Jev's probabilities, the model, the input tokens, and whether the diff was cut to fit the model. The job summary shows the same text.
-- **Feedback labels**: Creates `risk-ok` and `risk-should-be:low`, `risk-should-be:medium`, and `risk-should-be:high`. Reviewers add one to say whether the tier was right. These labels feed the evaluation set that tunes the thresholds.
 - **Policy from the base branch**: Reads `review-policy.yml` from the base branch, never from the pull request, so a pull request cannot lower its own tier.
 - **Fails to a person**: When Jev fails, or the policy file is invalid, the tier is at least medium.
 - **Drafts are skipped**: A draft pull request is not classified. Mark it ready for review to classify it.

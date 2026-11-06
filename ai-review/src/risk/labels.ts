@@ -8,18 +8,7 @@ export const RISK_LABELS: Record<Tier, LabelSpec> = {
     high: { name: 'risk:high', color: 'd93f0b', description: 'Risk tier: high' },
 };
 
-const FEEDBACK_COLOR = 'ededed';
-
-export const FEEDBACK_LABELS: readonly LabelSpec[] = [
-    { name: 'risk-ok', color: FEEDBACK_COLOR, description: 'The risk tier looks right' },
-    ...TIERS.map((tier) => ({
-        name: `risk-should-be:${tier}`,
-        color: FEEDBACK_COLOR,
-        description: `The risk tier should be ${tier}`,
-    })),
-];
-
-export const ALL_LABELS: readonly LabelSpec[] = [...TIERS.map((tier) => RISK_LABELS[tier]), ...FEEDBACK_LABELS];
+const ALL_LABELS: readonly LabelSpec[] = TIERS.map((tier) => RISK_LABELS[tier]);
 
 export type LabelChange = { add: string[]; remove: string[] };
 

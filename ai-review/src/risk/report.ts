@@ -60,7 +60,5 @@ export function renderSummary(classification: Classification): string {
         '',
         ...jevSection(jev),
         '',
-        'Agree? Add the `risk-ok` label. Disagree? Add `risk-should-be:low`, `risk-should-be:medium` or `risk-should-be:high`.',
-        '',
     ].join('\n');
 }
