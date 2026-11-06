@@ -17,14 +17,14 @@ describe('reconcileRiskLabels', () => {
         });
     });
 
-    it('leaves feedback labels alone', () => {
-        expect(reconcileRiskLabels(['risk-ok', 'risk-should-be:low'], 'medium')).toEqual({ add: ['risk:medium'], remove: [] });
+    it('leaves other labels alone', () => {
+        expect(reconcileRiskLabels(['bug', 'needs-human-review'], 'medium')).toEqual({ add: ['risk:medium'], remove: [] });
     });
 });
 
 describe('missingLabels', () => {
     it('lists only the labels the repo lacks, with their colors', () => {
-        const missing = missingLabels(['risk:low', 'risk:medium', 'risk-ok', 'risk-should-be:low', 'risk-should-be:medium', 'risk-should-be:high']);
+        const missing = missingLabels(['risk:low', 'risk:medium', 'bug']);
         expect(missing).toEqual([{ name: 'risk:high', color: 'd93f0b', description: 'Risk tier: high' }]);
     });
 });
