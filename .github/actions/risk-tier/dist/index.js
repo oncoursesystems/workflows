@@ -53556,7 +53556,8 @@ var ATTEMPTS = 3;
 var BASE_BACKOFF_MS = 2e3;
 var RETRYABLE_STATUSES = /* @__PURE__ */ new Set([429, 529]);
 var ERROR_TEXT_LIMIT = 500;
-var CONTEXT_RETRIES = 3;
+var CONTEXT_RETRIES = 6;
+var MIN_DIFF_CHARS = 1e3;
 var TIER_QUESTION = {
   type: "choice",
   instructions: "How much human review does the pull request described by `pull_request`, `files`, and `diff` need before merge, judged by what could go wrong for school districts if the change is wrong?",
@@ -53734,8 +53735,12 @@ async function askJev(pr, policy, options) {
   let diff = diffOfWholeFilesThatFit(files, STATE_BUDGET_CHARS - withoutDiff);
   let attempt = await post(request2(diff), options);
   for (let retry = 0; attempt.kind === "too-long" && retry < CONTEXT_RETRIES; retry++) {
-    diff = omittedDiff(files);
-    if (retry > 0) {
+    const smallerDiff = Math.floor(diff.text.length / 4);
+    if (diff.coverage !== "omitted" && smallerDiff >= MIN_DIFF_CHARS) {
+      diff = diffOfWholeFilesThatFit(files, smallerDiff);
+    } else if (diff.coverage !== "omitted") {
+      diff = omittedDiff(files);
+    } else {
       fileBudget = Math.floor(fileBudget / 2);
       fileList = fileListThatFits(files, fileBudget);
     }
