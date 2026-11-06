@@ -53556,6 +53556,7 @@ var ATTEMPTS = 3;
 var BASE_BACKOFF_MS = 2e3;
 var RETRYABLE_STATUSES = /* @__PURE__ */ new Set([429, 529]);
 var ERROR_TEXT_LIMIT = 500;
+var CONTEXT_RETRIES = 3;
 var TIER_QUESTION = {
   type: "choice",
   instructions: "How much human review does the pull request described by `pull_request`, `files`, and `diff` need before merge, judged by what could go wrong for school districts if the change is wrong?",
@@ -53611,16 +53612,31 @@ var omittedDiff = (files) => ({
   text: `[diff omitted: the patches of ${files.length} files are too large for the model context]`,
   coverage: "omitted"
 });
-function buildState(pr, files, diff) {
+var fileEntry = (file2) => ({
+  path: file2.path,
+  ...file2.previousPath === void 0 ? {} : { previous_path: file2.previousPath },
+  status: file2.status,
+  additions: file2.additions,
+  deletions: file2.deletions
+});
+function fileListThatFits(files, budget) {
+  const entries = [];
+  let used = 0;
+  for (const file2 of files) {
+    const entry = fileEntry(file2);
+    const size2 = JSON.stringify(entry).length + 1;
+    if (used + size2 > budget) break;
+    entries.push(entry);
+    used += size2;
+  }
+  return { entries, total: files.length };
+}
+function buildState(pr, fileList, diff) {
+  const { entries, total } = fileList;
   return {
     pull_request: { title: pr.title, body: pr.body, author: pr.author },
-    files: files.map((file2) => ({
-      path: file2.path,
-      ...file2.previousPath === void 0 ? {} : { previous_path: file2.previousPath },
-      status: file2.status,
-      additions: file2.additions,
-      deletions: file2.deletions
-    })),
+    files: entries,
+    ...entries.length === total ? {} : { files_truncated: `${entries.length} of ${total} files listed` },
     diff: diff.text
   };
 }
@@ -53709,17 +53725,25 @@ async function askJev(pr, policy, options) {
   const files = pr.files.filter((file2) => !isIgnored(file2.path));
   const questions = jevQuestions(policy.sensitiveAreas);
   const askedSensitiveArea = "sensitive_area" in questions;
-  const request2 = (diff2) => JSON.stringify({ model: options.model, state: buildState(pr, files, diff2), questions });
-  const withoutDiff = JSON.stringify(buildState(pr, files, { text: "", coverage: "complete" })).length;
+  const empty = { text: "", coverage: "complete" };
+  const metadata = JSON.stringify(buildState(pr, { entries: [], total: 0 }, empty)).length;
+  let fileBudget = STATE_BUDGET_CHARS - metadata;
+  let fileList = fileListThatFits(files, fileBudget);
+  const request2 = (diff2) => JSON.stringify({ model: options.model, state: buildState(pr, fileList, diff2), questions });
+  const withoutDiff = JSON.stringify(buildState(pr, fileList, empty)).length;
   let diff = diffOfWholeFilesThatFit(files, STATE_BUDGET_CHARS - withoutDiff);
   let attempt = await post(request2(diff), options);
-  if (attempt.kind === "too-long") {
+  for (let retry = 0; attempt.kind === "too-long" && retry < CONTEXT_RETRIES; retry++) {
     diff = omittedDiff(files);
+    if (retry > 0) {
+      fileBudget = Math.floor(fileBudget / 2);
+      fileList = fileListThatFits(files, fileBudget);
+    }
     attempt = await post(request2(diff), options);
   }
   switch (attempt.kind) {
     case "too-long":
-      return { status: "failed", error: "the request exceeds the model context even without the diff" };
+      return { status: "failed", error: "the request exceeds the model context even without the diff and with a shortened file list" };
     case "error":
       return { status: "failed", error: attempt.error };
     case "ok": {

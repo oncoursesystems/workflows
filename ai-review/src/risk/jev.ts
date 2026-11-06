@@ -16,6 +16,7 @@ const ATTEMPTS = 3;
 const BASE_BACKOFF_MS = 2_000;
 const RETRYABLE_STATUSES = new Set([429, 529]);
 const ERROR_TEXT_LIMIT = 500;
+const CONTEXT_RETRIES = 3;
 
 export type DiffCoverage = 'complete' | 'truncated' | 'omitted';
 
@@ -114,16 +115,35 @@ const omittedDiff = (files: readonly ChangedFile[]): DiffText => ({
     coverage: 'omitted',
 });
 
-export function buildState(pr: PullRequest, files: readonly ChangedFile[], diff: DiffText) {
+const fileEntry = (file: ChangedFile) => ({
+    path: file.path,
+    ...(file.previousPath === undefined ? {} : { previous_path: file.previousPath }),
+    status: file.status,
+    additions: file.additions,
+    deletions: file.deletions,
+});
+
+export type FileList = { entries: ReturnType<typeof fileEntry>[]; total: number };
+
+export function fileListThatFits(files: readonly ChangedFile[], budget: number): FileList {
+    const entries: ReturnType<typeof fileEntry>[] = [];
+    let used = 0;
+    for (const file of files) {
+        const entry = fileEntry(file);
+        const size = JSON.stringify(entry).length + 1;
+        if (used + size > budget) break;
+        entries.push(entry);
+        used += size;
+    }
+    return { entries, total: files.length };
+}
+
+export function buildState(pr: PullRequest, fileList: FileList, diff: DiffText) {
+    const { entries, total } = fileList;
     return {
         pull_request: { title: pr.title, body: pr.body, author: pr.author },
-        files: files.map((file) => ({
-            path: file.path,
-            ...(file.previousPath === undefined ? {} : { previous_path: file.previousPath }),
-            status: file.status,
-            additions: file.additions,
-            deletions: file.deletions,
-        })),
+        files: entries,
+        ...(entries.length === total ? {} : { files_truncated: `${entries.length} of ${total} files listed` }),
         diff: diff.text,
     };
 }
@@ -233,19 +253,27 @@ export async function askJev(pr: PullRequest, policy: Policy, options: JevOption
     const files = pr.files.filter((file) => !isIgnored(file.path));
     const questions = jevQuestions(policy.sensitiveAreas);
     const askedSensitiveArea = 'sensitive_area' in questions;
+    const empty: DiffText = { text: '', coverage: 'complete' };
+    const metadata = JSON.stringify(buildState(pr, { entries: [], total: 0 }, empty)).length;
+    let fileBudget = STATE_BUDGET_CHARS - metadata;
+    let fileList = fileListThatFits(files, fileBudget);
     const request = (diff: DiffText) =>
-        JSON.stringify({ model: options.model, state: buildState(pr, files, diff), questions });
+        JSON.stringify({ model: options.model, state: buildState(pr, fileList, diff), questions });
 
-    const withoutDiff = JSON.stringify(buildState(pr, files, { text: '', coverage: 'complete' })).length;
+    const withoutDiff = JSON.stringify(buildState(pr, fileList, empty)).length;
     let diff = diffOfWholeFilesThatFit(files, STATE_BUDGET_CHARS - withoutDiff);
     let attempt = await post(request(diff), options);
-    if (attempt.kind === 'too-long') {
+    for (let retry = 0; attempt.kind === 'too-long' && retry < CONTEXT_RETRIES; retry++) {
         diff = omittedDiff(files);
+        if (retry > 0) {
+            fileBudget = Math.floor(fileBudget / 2);
+            fileList = fileListThatFits(files, fileBudget);
+        }
         attempt = await post(request(diff), options);
     }
     switch (attempt.kind) {
         case 'too-long':
-            return { status: 'failed', error: 'the request exceeds the model context even without the diff' };
+            return { status: 'failed', error: 'the request exceeds the model context even without the diff and with a shortened file list' };
         case 'error':
             return { status: 'failed', error: attempt.error };
         case 'ok': {
