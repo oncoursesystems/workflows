@@ -53735,14 +53735,12 @@ async function askJev(pr, policy, options) {
   let diff = diffOfWholeFilesThatFit(files, STATE_BUDGET_CHARS - withoutDiff);
   let attempt = await post(request2(diff), options);
   for (let retry = 0; attempt.kind === "too-long" && retry < CONTEXT_RETRIES; retry++) {
-    const smallerDiff = Math.floor(diff.text.length / 4);
-    if (diff.coverage !== "omitted" && smallerDiff >= MIN_DIFF_CHARS) {
-      diff = diffOfWholeFilesThatFit(files, smallerDiff);
-    } else if (diff.coverage !== "omitted") {
-      diff = omittedDiff(files);
-    } else {
+    if (diff.coverage === "omitted") {
       fileBudget = Math.floor(fileBudget / 2);
       fileList = fileListThatFits(files, fileBudget);
+    } else {
+      const smallerDiff = Math.floor(diff.text.length / 4);
+      diff = smallerDiff >= MIN_DIFF_CHARS ? diffOfWholeFilesThatFit(files, smallerDiff) : omittedDiff(files);
     }
     attempt = await post(request2(diff), options);
   }
