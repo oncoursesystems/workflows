@@ -16,7 +16,8 @@ const ATTEMPTS = 3;
 const BASE_BACKOFF_MS = 2_000;
 const RETRYABLE_STATUSES = new Set([429, 529]);
 const ERROR_TEXT_LIMIT = 500;
-const CONTEXT_RETRIES = 3;
+const CONTEXT_RETRIES = 6;
+const MIN_DIFF_CHARS = 1_000;
 
 export type DiffCoverage = 'complete' | 'truncated' | 'omitted';
 
@@ -264,10 +265,12 @@ export async function askJev(pr: PullRequest, policy: Policy, options: JevOption
     let diff = diffOfWholeFilesThatFit(files, STATE_BUDGET_CHARS - withoutDiff);
     let attempt = await post(request(diff), options);
     for (let retry = 0; attempt.kind === 'too-long' && retry < CONTEXT_RETRIES; retry++) {
-        diff = omittedDiff(files);
-        if (retry > 0) {
+        if (diff.coverage === 'omitted') {
             fileBudget = Math.floor(fileBudget / 2);
             fileList = fileListThatFits(files, fileBudget);
+        } else {
+            const smallerDiff = Math.floor(diff.text.length / 4);
+            diff = smallerDiff >= MIN_DIFF_CHARS ? diffOfWholeFilesThatFit(files, smallerDiff) : omittedDiff(files);
         }
         attempt = await post(request(diff), options);
     }

@@ -211,6 +211,21 @@ describe('askJev', () => {
         expect(result).toEqual({ status: 'failed', error: expect.stringContaining('HTTP 529') });
     });
 
+    it('drops a token-dense file but keeps the rest of the diff when the context is exceeded', async () => {
+        const calls: Call[] = [];
+        const tooLong = () => json(400, { detail: { error: 'max_tokens_exceeded' } });
+        const result = await askJev(
+            pr([file('AppHost.cs', '+small-route'), file('webfont.css', `-${'\\e900;'.repeat(9_000)}`)]),
+            noIgnore,
+            options([tooLong(), json(200, goodBody)], calls, []),
+        );
+        const secondDiff = (calls[1]?.body['state'] as { diff: string }).diff;
+        expect(secondDiff).toContain('+small-route');
+        expect(secondDiff).not.toContain('\\e900;');
+        expect(secondDiff).toContain('[diff truncated: 1 of 2 files shown]');
+        expect(result.status === 'answered' && result.verdict.diff).toBe('truncated');
+    });
+
     it('retries once without the diff when the context is exceeded', async () => {
         const calls: Call[] = [];
         const result = await askJev(
