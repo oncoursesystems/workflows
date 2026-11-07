@@ -11,6 +11,7 @@ The action classifies each pull request as low, medium, or high risk and publish
 - **Policy from the base branch**: Reads `review-policy.yml` from the base branch, never from the pull request, so a pull request cannot lower its own tier.
 - **Fails to a person**: When Jev fails, or the policy file is invalid, the tier is at least medium.
 - **Drafts are skipped**: A draft pull request is not classified. Mark it ready for review to classify it.
+- **Backfill**: A `workflow_dispatch` run with the `pull-request` input classifies a pull request that has no new event, such as one opened before the workflow existed or one whose base branch changed its review policy. The comment at the top of the usage example has the loop that runs it for every open pull request.
 
 ## Inputs
 
@@ -21,6 +22,10 @@ The action classifies each pull request as low, medium, or high risk and publish
 ### `typesafe-api-key`
 
 **Required** TypeSafe API key for Jev.
+
+### `pull-request`
+
+**Optional** Number of the pull request to classify. The action uses it only when the event is not a `pull_request` event, such as a `workflow_dispatch` backfill.
 
 ### `policy-path`
 
@@ -45,12 +50,28 @@ The risk tier, `low`, `medium`, or `high`. Empty for a draft pull request.
 ```yaml
 name: risk-tier
 
+# Backfill: after a review-policy.yml change merges, or to classify pull requests opened
+# before this workflow existed, run the workflow once for each open pull request that is
+# not a draft:
+#
+#   gh pr list --state open --limit 500 --json number,isDraft -q '.[] | select(.isDraft | not) | .number' |
+#     while read n; do gh workflow run risk-tier.yml -f pull-request=$n; done
+#
+# Each run reads review-policy.yml from the pull request's base branch, replaces its risk
+# label, and adds a new risk-tier check. The action skips drafts.
+
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pull-request:
+        description: Number of the pull request to classify
+        required: true
+        type: number
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.pull-request }}
   cancel-in-progress: true
 
 permissions:
@@ -61,13 +82,14 @@ permissions:
 
 jobs:
   risk-tier:
-    if: github.event.pull_request.draft == false
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:
       - uses: oncoursesystems/workflows/.github/actions/risk-tier@main
         with:
           github-token: ${{ github.token }}
           typesafe-api-key: ${{ secrets.TYPESAFE_AI_KEY }}
+          pull-request: ${{ inputs.pull-request }}
 ```
 
 ## Review policy

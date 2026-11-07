@@ -1,11 +1,27 @@
 name: risk-tier
 
+# Backfill: after a review-policy.yml change merges, or to classify pull requests opened
+# before this workflow existed, run the workflow once for each open pull request that is
+# not a draft:
+#
+#   gh pr list --state open --limit 500 --json number,isDraft -q '.[] | select(.isDraft | not) | .number' |
+#     while read n; do gh workflow run risk-tier.yml -f pull-request=$n; done
+#
+# Each run reads review-policy.yml from the pull request's base branch, replaces its risk
+# label, and adds a new risk-tier check. The action skips drafts.
+
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pull-request:
+        description: Number of the pull request to classify
+        required: true
+        type: number
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.pull-request }}
   cancel-in-progress: true
 
 permissions:
@@ -16,10 +32,11 @@ permissions:
 
 jobs:
   risk-tier:
-    if: github.event.pull_request.draft == false
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:
       - uses: oncoursesystems/workflows/.github/actions/risk-tier@main
         with:
           github-token: ${{ github.token }}
           typesafe-api-key: ${{ secrets.TYPESAFE_AI_KEY }}
+          pull-request: ${{ inputs.pull-request }}

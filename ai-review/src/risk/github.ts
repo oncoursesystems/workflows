@@ -17,6 +17,11 @@ export const parseRepo = (fullName: string): RepoRef => {
     return { owner, repo };
 };
 
+export const parsePullRequestNumber = (text: string): number => {
+    if (!/^[1-9]\d*$/.test(text.trim())) throw new Error(`expected a pull request number, got "${text}"`);
+    return Number(text);
+};
+
 const status = (error: unknown): number | undefined =>
     typeof error === 'object' && error !== null && 'status' in error ? Number(error.status) : undefined;
 const isNotFound = (error: unknown): boolean => status(error) === 404;
