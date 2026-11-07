@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { capSummaryFindings, dedupe, placement, type Candidate, type ReviewedFinding, type Verdict } from './finding.ts';
+import { capSummaryFindings, dedupe, mergeDuplicates, placement, type Candidate, type ReviewedFinding, type Verdict } from './finding.ts';
 
 const candidate = (overrides: Partial<Candidate> = {}): Candidate => ({
     kind: 'correctness',
@@ -11,25 +11,33 @@ const candidate = (overrides: Partial<Candidate> = {}): Candidate => ({
     ...overrides,
 });
 
-const real = (introducedByPullRequest = true): Verdict => ({ real: true, introducedByPullRequest, reason: 'confirmed' });
-const notReal: Verdict = { real: false, introducedByPullRequest: true, reason: 'guarded on line 112' };
+const real = (introducedByPullRequest = true, severity: Verdict['severity'] = 'important'): Verdict => ({
+    real: true,
+    introducedByPullRequest,
+    severity,
+    reason: 'confirmed',
+});
+const minor = (): Verdict => real(true, 'minor');
+const notReal: Verdict = { real: false, introducedByPullRequest: true, severity: 'important', reason: 'guarded on line 112' };
 
 describe('placement', () => {
-    it('posts an important finding inline when 2 of 3 reviewers say real', () => {
-        expect(placement(candidate(), [real(), real(), notReal])).toBe('inline');
+    it('posts a finding inline when 2 of 3 reviewers say it is real and important', () => {
+        expect(placement([real(), real(), notReal])).toBe('inline');
     });
 
     it('drops a finding only 1 of 3 reviewers confirm', () => {
-        expect(placement(candidate(), [real(), notReal, notReal])).toBe('dropped');
+        expect(placement([real(), notReal, notReal])).toBe('dropped');
     });
 
-    it('keeps a confirmed nit out of the inline comments', () => {
-        expect(placement(candidate({ severity: 'nit' }), [real(), real(), real()])).toBe('nit');
+    it('lets the reviewers decide severity, whatever the bug finder said', () => {
+        expect(placement([minor(), minor(), real()])).toBe('minor');
+        expect(placement([real(), real(), minor()])).toBe('inline');
+        expect(placement([real(), minor(), notReal])).toBe('inline');
     });
 
     it('marks a finding pre-existing when most confirming reviewers say the pull request did not introduce it', () => {
-        expect(placement(candidate(), [real(false), real(false), real(true)])).toBe('pre-existing');
-        expect(placement(candidate(), [real(false), real(true), notReal])).toBe('inline');
+        expect(placement([real(false), real(false), real(true)])).toBe('pre-existing');
+        expect(placement([real(false), real(true), notReal])).toBe('inline');
     });
 });
 
@@ -40,21 +48,21 @@ describe('capSummaryFindings', () => {
         placement: placementValue,
     });
 
-    it('keeps at most 3 nits and 2 pre-existing findings and never caps inline ones', () => {
+    it('keeps at most 3 minor and 2 pre-existing findings and never caps inline ones', () => {
         const findings = [
-            ...[1, 2, 3, 4].map((line) => reviewed('nit', line)),
+            ...[1, 2, 3, 4].map((line) => reviewed('minor', line)),
             ...[5, 6, 7].map((line) => reviewed('pre-existing', line)),
             ...[8, 9, 10, 11].map((line) => reviewed('inline', line)),
         ];
         const count = (p: ReviewedFinding['placement']) => capSummaryFindings(findings).filter((f) => f.placement === p).length;
-        expect([count('nit'), count('pre-existing'), count('inline'), count('dropped')]).toEqual([3, 2, 4, 2]);
+        expect([count('minor'), count('pre-existing'), count('inline'), count('dropped')]).toEqual([3, 2, 4, 2]);
     });
 });
 
 describe('dedupe', () => {
     it('merges candidates on the same file within 5 lines and keeps the important one', () => {
         const kept = dedupe([
-            candidate({ line: 40, severity: 'nit', kind: 'contracts' }),
+            candidate({ line: 40, severity: 'minor', kind: 'contracts' }),
             candidate({ line: 45, severity: 'important' }),
             candidate({ line: 60 }),
             candidate({ file: 'src/Other.cs', line: 40 }),
@@ -64,5 +72,18 @@ describe('dedupe', () => {
             'src/Notes.cs:60:important',
             'src/Other.cs:40:important',
         ]);
+    });
+});
+
+describe('mergeDuplicates', () => {
+    const list = [candidate({ line: 42 }), candidate({ line: 77 }), candidate({ line: 90 }), candidate({ line: 120 })];
+
+    it('keeps the first candidate of each group, so an important one listed first wins', () => {
+        expect(mergeDuplicates(list, { groups: [{ candidates: [1, 0], fix: 'f' }, { candidates: [2, 3], fix: 'f' }] }).map((c) => c.line)).toEqual([42, 90]);
+    });
+
+    it('ignores indexes outside the list and keeps everything when there are no groups', () => {
+        expect(mergeDuplicates(list, { groups: [{ candidates: [3, 9], fix: 'f' }] }).map((c) => c.line)).toEqual([42, 77, 90, 120]);
+        expect(mergeDuplicates(list, { groups: [] })).toHaveLength(4);
     });
 });

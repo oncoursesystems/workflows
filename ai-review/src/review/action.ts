@@ -3,6 +3,7 @@ import { context, getOctokit } from '@actions/github';
 import { fetchPullRequest, parsePullRequestNumber } from '../risk/github.ts';
 import { runAgent } from './agent.ts';
 import { postCheck } from './github.ts';
+import { renderAgentLog } from './report.ts';
 import { runReview } from './run.ts';
 
 const FRESH_EVENTS = new Set(['labeled', 'workflow_dispatch']);
@@ -15,12 +16,15 @@ async function run(): Promise<void> {
         return;
     }
     const number = eventNumber ?? parsePullRequestNumber(input);
-    const octokit = getOctokit(core.getInput('github-token', { required: true }));
+    const checksOctokit = getOctokit(core.getInput('github-token', { required: true }));
+    const botToken = core.getInput('bot-token');
+    const octokit = botToken === '' ? checksOctokit : getOctokit(botToken);
     const fresh = FRESH_EVENTS.has(context.payload.action ?? context.eventName);
 
     try {
         const outcome = await runReview({
             octokit,
+            checksOctokit,
             repo: context.repo,
             number,
             cwd: process.env['GITHUB_WORKSPACE'] ?? process.cwd(),
@@ -29,11 +33,15 @@ async function run(): Promise<void> {
             runAgent,
         });
         core.info(`#${number}: ${outcome.kind}`);
-        if (outcome.kind === 'reviewed') await core.summary.addRaw(outcome.summary).write();
+        if (outcome.kind === 'reviewed') {
+            const agentLog = renderAgentLog(outcome.result.agents);
+            core.info(agentLog);
+            await core.summary.addRaw(outcome.summary).addCodeBlock(agentLog).write();
+        }
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const pr = await fetchPullRequest(octokit, context.repo, number);
-        await postCheck(octokit, context.repo, pr.headSha, 'The review failed (trial run)', `The AI review did not finish: ${message}`);
+        const pr = await fetchPullRequest(checksOctokit, context.repo, number);
+        await postCheck(checksOctokit, context.repo, pr.headSha, 'The review failed', `The AI review did not finish: ${message}`);
         core.setFailed(message);
     }
 }

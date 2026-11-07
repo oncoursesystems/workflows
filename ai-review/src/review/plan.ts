@@ -21,3 +21,5 @@ export function findersFor(tier: Tier): FinderSpec[] {
 }
 
 export const VERIFIER_MODEL = MODELS.haiku;
+
+export const MERGER_MODEL = MODELS.sonnet;

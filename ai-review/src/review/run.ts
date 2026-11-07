@@ -14,12 +14,13 @@ import {
     upsertSummary,
     type Summary,
 } from './github.ts';
-import { checkTitle, inlineBody, renderRoundLimit, renderSummary } from './report.ts';
+import { checkTitle, inlineBody, renderFailed, renderRoundLimit, renderRunning, renderSummary } from './report.ts';
 import { review, type ReviewResult } from './review.ts';
 import { fingerprint, MAX_ROUNDS, readState, rightSideLines, type ReviewState } from './state.ts';
 
 export type RunOptions = {
     octokit: Octokit;
+    checksOctokit: Octokit;
     repo: RepoRef;
     number: number;
     cwd: string;
@@ -67,22 +68,32 @@ export async function runReview(options: RunOptions): Promise<RunOutcome> {
     }
 
     const scope = await chooseScope(options, pr, previous);
-    const [labels, rules] = await Promise.all([fetchLabels(octokit, repo, number), fetchRules(octokit, repo, pr.baseRef)]);
-    const result = await review(
-        {
-            pr,
-            tier: tierFromLabels(labels),
-            files: scope.kind === 'full' ? pr.files : scope.files,
-            scope: describeScope(scope),
-            rules,
-            cwd: options.cwd,
-        },
-        options.runAgent,
-    );
-
     const state: ReviewState = { reviewedSha: pr.headSha, round: (previous?.round ?? 0) + 1 };
+    const summaryComment = options.publish
+        ? await upsertSummary(octokit, repo, number, existing, renderRunning(state, describeScope(scope), previous))
+        : existing;
+    let result: ReviewResult;
+    try {
+        const [labels, rules] = await Promise.all([fetchLabels(octokit, repo, number), fetchRules(octokit, repo, pr.baseRef)]);
+        result = await review(
+            {
+                pr,
+                tier: tierFromLabels(labels),
+                files: scope.kind === 'full' ? pr.files : scope.files,
+                scope: describeScope(scope),
+                rules,
+                cwd: options.cwd,
+            },
+            options.runAgent,
+        );
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (options.publish) await upsertSummary(octokit, repo, number, summaryComment, renderFailed(state, message, previous));
+        throw error;
+    }
+
     const { inline, outsideDiff } = splitInline(result.findings, pr);
-    const summary = renderSummary({ result, state, inline, outsideDiff, scope: describeScope(scope) });
+    const summary = renderSummary({ repo: pr.repo, result, state, inline, outsideDiff, scope: describeScope(scope) });
     const outcome: RunOutcome = { kind: 'reviewed', result, state, inline, outsideDiff, summary };
     if (!options.publish) return outcome;
 
@@ -95,8 +106,8 @@ export async function runReview(options: RunOptions): Promise<RunOutcome> {
         pr.headSha,
         fresh.map((finding) => ({ path: finding.file, line: finding.line, body: inlineBody(finding) })),
     );
-    await upsertSummary(octokit, repo, number, existing, summary);
-    const nits = result.findings.filter((finding) => finding.placement === 'nit').length;
-    await postCheck(octokit, repo, pr.headSha, checkTitle(inline.length, outsideDiff.length, nits), summary);
+    await upsertSummary(octokit, repo, number, summaryComment, summary);
+    const minor = result.findings.filter((finding) => finding.placement === 'minor').length;
+    await postCheck(options.checksOctokit, repo, pr.headSha, checkTitle(inline.length + outsideDiff.length, minor), summary);
     return outcome;
 }

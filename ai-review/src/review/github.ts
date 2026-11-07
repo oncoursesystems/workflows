@@ -68,12 +68,19 @@ export async function postedFingerprints(octokit: Octokit, repo: RepoRef, number
     return fingerprintsIn(comments.map((comment) => comment.body));
 }
 
-export async function upsertSummary(octokit: Octokit, repo: RepoRef, number: number, existing: Summary | undefined, body: string) {
+export async function upsertSummary(
+    octokit: Octokit,
+    repo: RepoRef,
+    number: number,
+    existing: Summary | undefined,
+    body: string,
+): Promise<Summary> {
     if (existing === undefined) {
-        await octokit.rest.issues.createComment({ ...repo, issue_number: number, body });
-    } else if (existing.body !== body) {
-        await octokit.rest.issues.updateComment({ ...repo, comment_id: existing.id, body });
+        const { data } = await octokit.rest.issues.createComment({ ...repo, issue_number: number, body });
+        return { id: data.id, body };
     }
+    if (existing.body !== body) await octokit.rest.issues.updateComment({ ...repo, comment_id: existing.id, body });
+    return { id: existing.id, body };
 }
 
 export type InlineComment = { path: string; line: number; body: string };
