@@ -35,7 +35,16 @@ export type RunOutcome =
     | { kind: 'draft' }
     | { kind: 'up-to-date'; sha: string }
     | { kind: 'round-limit'; state: ReviewState }
-    | { kind: 'reviewed'; result: ReviewResult; state: ReviewState; inline: ReviewedFinding[]; outsideDiff: ReviewedFinding[]; summary: string };
+    | {
+          kind: 'reviewed';
+          pr: PullRequest;
+          scope: string;
+          result: ReviewResult;
+          state: ReviewState;
+          inline: ReviewedFinding[];
+          outsideDiff: ReviewedFinding[];
+          summary: string;
+      };
 
 export const describeScope = (scope: Scope): string =>
     scope.kind === 'full' ? 'the whole pull request' : `the changes since \`${scope.fromSha.slice(0, 7)}\``;
@@ -94,7 +103,7 @@ export async function runReview(options: RunOptions): Promise<RunOutcome> {
 
     const { inline, outsideDiff } = splitInline(result.findings, pr);
     const summary = renderSummary({ repo: pr.repo, result, state, inline, outsideDiff, scope: describeScope(scope) });
-    const outcome: RunOutcome = { kind: 'reviewed', result, state, inline, outsideDiff, summary };
+    const outcome: RunOutcome = { kind: 'reviewed', pr, scope: describeScope(scope), result, state, inline, outsideDiff, summary };
     if (!options.publish) return outcome;
 
     const posted = await postedFingerprints(octokit, repo, number);

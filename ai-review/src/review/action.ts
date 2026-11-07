@@ -1,8 +1,12 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
 import { fetchPullRequest, parsePullRequestNumber } from '../risk/github.ts';
 import { runAgent } from './agent.ts';
 import { postCheck } from './github.ts';
+import { reviewRecord } from './record.ts';
 import { renderAgentLog } from './report.ts';
 import { runReview } from './run.ts';
 
@@ -37,6 +41,12 @@ async function run(): Promise<void> {
             const agentLog = renderAgentLog(outcome.result.agents);
             core.info(agentLog);
             await core.summary.addRaw(outcome.summary).addCodeBlock(agentLog).write();
+            const dir = join(process.env['RUNNER_TEMP'] ?? tmpdir(), 'ai-review-record');
+            const path = join(dir, `${number}-round-${outcome.state.round}.json`);
+            await mkdir(dir, { recursive: true });
+            await writeFile(path, JSON.stringify(reviewRecord(outcome, new Date()), null, 2));
+            core.setOutput('record', path);
+            core.setOutput('record-name', `ai-review-${number}-round-${outcome.state.round}-${outcome.state.reviewedSha.slice(0, 7)}`);
         }
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

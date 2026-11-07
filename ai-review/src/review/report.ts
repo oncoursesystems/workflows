@@ -50,7 +50,7 @@ export function inlineBody(finding: ReviewedFinding): string {
         '',
         `**Failure scenario:** ${finding.failureScenario}`,
         '',
-        `<sub>${confirmations(finding)}.</sub>`,
+        `<sub>${confirmations(finding)}. React 👍 if this is a real problem or 👎 if it is wrong.</sub>`,
         fingerprintMarker(fingerprint(finding)),
     ].join('\n');
 }

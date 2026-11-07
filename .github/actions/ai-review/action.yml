@@ -41,6 +41,7 @@ runs:
       run: npm ci --omit=dev --no-audit --no-fund
 
     - name: Review the pull request
+      id: review
       shell: bash
       env:
         INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
@@ -48,3 +49,11 @@ runs:
         INPUT_PULL-REQUEST: ${{ inputs.pull-request }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
       run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/review/action.ts"
+
+    - name: Keep the review record
+      if: steps.review.outputs.record != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.review.outputs.record-name }}
+        path: ${{ steps.review.outputs.record }}
+        retention-days: 90

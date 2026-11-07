@@ -22,6 +22,8 @@ The action reviews a pull request with Claude and posts the findings that surviv
     - Important findings on a line in the diff become review comments. A finding is never posted twice.
     - Important findings outside the diff, up to 3 Minor findings, and up to 2 pre-existing findings go in the summary comment, each with a link to its line. The heading over the Minor findings rotates per review, from `MINOR_HEADINGS` in `report.ts`, and stays the same for the same commit.
     - The `ai-review` check gets the same summary.
+    - Each review comment asks the developer to react 👍 if the finding is a real problem or 👎 if it is wrong.
+    - The run uploads a review record, a JSON artifact named `ai-review-<number>-round-<round>-<sha>`, kept for 90 days. It holds every candidate the reviewers saw, with their votes and reasons, where it was posted, and each agent's turns, tool calls, cost and time.
 
 The summary comment keeps the reviewed commit and the round. A later push reviews only the changes since that commit. After 3 rounds the review stops.
 
@@ -56,3 +58,23 @@ npm run review -- --repo oncoursesystems/oncourse-systems --pr 2112 --dir ~/path
 ```
 
 The CLI prints the findings, the summary, and each agent's turns, tool calls, denied tool calls, cost and time. It posts nothing. Add `--publish` to post them. Claude runs on the local Claude Code login.
+
+## Measure the reviews
+
+Every review leaves enough behind to score it later. Collect the data before the review records expire, 90 days after each run.
+
+### Where the data is
+
+- **Review records.** One JSON artifact per run, described in `ReviewRecord` in [record.ts](/oncoursesystems/workflows/tree/main/ai-review/src/review/record.ts). List them with `gh api repos/<owner>/<repo>/actions/artifacts --paginate` and keep the names that start with `ai-review-`.
+- **Review comments.** Each one hides `<!-- ai-review:finding <fingerprint> -->`. The same fingerprint is on the finding in the review record. Read the comments with `gh api repos/<owner>/<repo>/pulls/<number>/comments --paginate`, and their 👍 and 👎 counts in `reactions`.
+- **Resolved threads.** The GraphQL `pullRequest.reviewThreads` field has `isResolved` for each thread.
+- **Later commits.** `git log -L <line>,<line>:<file> <reviewedSha>..<merge commit>` shows whether the flagged line changed before the merge.
+- **The pull requests.** Search for the `ai-review` label: `gh pr list --label ai-review --state all`.
+
+### What to compute
+
+- **Precision.** Of the review comments, the share marked 👍 and the share marked 👎. For comments with no reaction, use a changed line or a resolved thread as a weaker signal. Split by kind, tier and model.
+- **Severity.** How often developers fix Important findings compared with Minor ones. If Minor findings get fixed as often, the Important bar in `REVIEW.md` is too high.
+- **Reviewer filter.** Dropped candidates that turn out real, found in later fixes, show the reviewers dropping too much. Posted findings marked 👎 show them keeping too much.
+- **Misses.** For bug-fix pull requests merged later, `git blame` the lines they fixed back to the pull request that added them. If that pull request had a review and no finding covered those lines, the review missed it.
+- **Cost and time.** Per review, per tier and per agent, from the review records.
