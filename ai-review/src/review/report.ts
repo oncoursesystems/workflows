@@ -126,7 +126,7 @@ export function renderFailed(state: ReviewState, message: string, previous: Revi
         HEADING,
         '',
         `The review of \`${shortSha(state.reviewedSha)}\` did not finish: ${message}`,
-        'Push again to retry, or remove and re-add the `ai-review` label to start over.',
+        "Push again to retry, or run the `ai-review` workflow by hand with this pull request's number to start over.",
         ...(previous === undefined ? [] : [renderState(previous)]),
     ].join('\n');
 }
@@ -137,7 +137,7 @@ export function renderRoundLimit(state: ReviewState): string {
         HEADING,
         '',
         `This pull request has had ${MAX_ROUNDS} review rounds, so the review stopped.`,
-        'If important findings are still open, rethink the approach, or remove and re-add the `ai-review` label to start over.',
+        "If important findings are still open, rethink the approach, or run the `ai-review` workflow by hand with this pull request's number to start over.",
         renderState(state),
     ].join('\n');
 }

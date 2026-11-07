@@ -48,6 +48,9 @@ export type RunOutcome =
           summary: string;
       };
 
+export const startsOver = (eventName: string, startOverInput: string): boolean =>
+    eventName === 'workflow_dispatch' && startOverInput !== 'false';
+
 export function describeScope(scope: Scope): string {
     if (scope.kind === 'since') return `the changes since \`${scope.fromSha.slice(0, 7)}\``;
     return scope.reason === undefined ? 'the whole pull request' : `the whole pull request, because ${scope.reason}`;
