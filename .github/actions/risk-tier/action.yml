@@ -11,6 +11,9 @@ inputs:
   typesafe-api-key:
     description: TypeSafe API key for Jev.
     required: true
+  pull-request:
+    description: Number of the pull request to classify. Used only when the event is not a pull_request event, such as a workflow_dispatch backfill.
+    required: false
   policy-path:
     description: Path of the review policy, read from the pull request's base branch.
     required: false

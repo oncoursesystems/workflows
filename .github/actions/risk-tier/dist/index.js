@@ -53834,6 +53834,10 @@ function renderSummary(classification) {
 
 // src/risk/github.ts
 var DEFAULT_POLICY_PATH = "review-policy.yml";
+var parsePullRequestNumber = (text) => {
+  if (!/^[1-9]\d*$/.test(text.trim())) throw new Error(`expected a pull request number, got "${text}"`);
+  return Number(text);
+};
 var status = (error63) => typeof error63 === "object" && error63 !== null && "status" in error63 ? Number(error63.status) : void 0;
 var isNotFound = (error63) => status(error63) === 404;
 var isAlreadyExists = (error63) => status(error63) === 422;
@@ -53911,20 +53915,21 @@ async function publish(octokit, repo, pr, classification) {
 
 // src/risk/action.ts
 async function run() {
-  const event = context2.payload.pull_request;
-  if (event === void 0) {
-    setFailed(`risk-tier runs on pull_request events, not ${context2.eventName}.`);
+  const input2 = getInput("pull-request");
+  const eventNumber = context2.payload.pull_request?.number;
+  if (eventNumber === void 0 && input2 === "") {
+    setFailed(`risk-tier needs a pull_request event or the pull-request input, and got ${context2.eventName} without it.`);
     return;
   }
-  const { number: number4 } = event;
-  if (event["draft"] === true) {
-    info(`#${number4} is a draft, so it is not classified.`);
-    return;
-  }
+  const number4 = eventNumber ?? parsePullRequestNumber(input2);
   const octokit = getOctokit(getInput("github-token", { required: true }));
   const apiKey = getInput("typesafe-api-key", { required: true });
   setSecret(apiKey);
   const pr = await fetchPullRequest(octokit, context2.repo, number4);
+  if (pr.draft) {
+    info(`#${number4} is a draft, so it is not classified.`);
+    return;
+  }
   const lookup = await fetchPolicy(octokit, context2.repo, pr.baseRef, getInput("policy-path") || DEFAULT_POLICY_PATH);
   const classification = await assess(pr, lookup, {
     kind: "ask",
