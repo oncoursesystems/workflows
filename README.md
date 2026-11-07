@@ -15,8 +15,7 @@ The web workflow is designed to build and publish Docker images to a registry an
 
 ### Actions
 
-- [claude-code-review](.github/workflows/claude-code-review.yml) ([docs](docs/claude-code-review.md)) - Automated AI code review for pull requests using Claude
-- [claude-security-review](.github/workflows/claude-security-review.yml) ([docs](docs/claude-security-review.md)) - Automated AI security review for pull requests using Claude
+- [ai-review](.github/actions/ai-review/action.yml) ([docs](docs/ai-review.md)) - Reviews a pull request with Claude bug finders sized by its risk tier and posts the findings that three reviewers confirm
 - [create-release](.github/workflows/create-release.yml) ([docs](docs/create-release.md)) - Creates a GitHub release and publishes a Docker image with the current timestamp as the tag
 - [docker-build](.github/workflows/docker-build.yml) ([docs](docs/docker-build.md)) - Builds a Docker image and pushes it to a registry
 - [e2e-testing](.github/workflows/e2e-testing.yml) ([docs](docs/e2e-testing.md)) - Agentic E2E UI testing using Claude AI and agent-browser
