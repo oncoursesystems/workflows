@@ -16,6 +16,11 @@ const HUNTS: Record<BugKind, string> = {
         'built from user data without encoding, SQL built from user input, secrets or keys in code.',
 };
 
+const SEVERITY_RULE =
+    'Severity "important" means the bug can lose, corrupt or expose data, show one user another user\'s data, ' +
+    'or break a screen or endpoint. REVIEW.md, when present, defines Important for this repository and overrides ' +
+    'this default. Every other real bug is "minor".';
+
 const rulesSection = ({ claudeMd, reviewMd }: RepoRules): string =>
     [
         claudeMd ? `<claude_md>\n${claudeMd}\n</claude_md>` : '',
@@ -35,8 +40,7 @@ export function finderSystemPrompt(kinds: readonly BugKind[], rules: RepoRules):
         'Report a candidate only when you can name the file and the line in the new code, and a concrete failure ' +
             'scenario: what a user or caller does, and what goes wrong. Report bugs the pull request introduces or ' +
             'touches. Do not report style, naming, missing tests, or "consider" suggestions.',
-        'Severity "important" means the bug can lose, corrupt or expose data, or break a screen or endpoint. ' +
-            'Everything else that is still a real bug is "nit".',
+        SEVERITY_RULE,
         'Lean toward reporting a plausible bug. A separate reviewer checks every candidate before anything is posted.',
         'Return an empty list when you find nothing.',
         '',
@@ -86,13 +90,20 @@ export function finderPrompt(pr: PullRequest, files: readonly ChangedFile[], sco
         .join('\n\n');
 }
 
+export const FINDER_RETRY_NOTE =
+    'Your last review of this pull request returned without opening a file. Read the changed files in full ' +
+    'and search for related code before you answer.';
+
 export function verifierSystemPrompt(rules: RepoRules): string {
     return [
         'You check one candidate bug that another reviewer found in a pull request. Your job is to prove it wrong.',
-        'The working directory is the repository at the pull request head. Open the code and answer three questions:',
+        'The working directory is the repository at the pull request head. Open the code and answer these questions:',
         '1. Does the code at that line do what the claim says?',
         '2. Can the failure scenario actually happen, or does a guard, a caller or a constraint already stop it?',
-        '3. Did this pull request introduce it? Use the diff you are given to decide.',
+        '3. Did this pull request introduce it? The diff covers every file the pull request changed. Its removed ' +
+            'lines show how the code worked before, including code the pull request deleted from other files.',
+        '4. How severe is it?',
+        SEVERITY_RULE,
         'Answer real only when the claim holds and the failure can happen. Give a one-sentence reason.',
         '',
         rulesSection(rules),
@@ -107,6 +118,6 @@ export function verifierPrompt(pr: PullRequest, files: readonly ChangedFile[], c
         `Claim: ${candidate.claim}`,
         `Failure scenario: ${candidate.failureScenario}`,
         '</candidate>',
-        diffSection(files.filter((file) => file.path === candidate.file)),
+        diffSection([...files].sort((a, b) => Number(b.path === candidate.file) - Number(a.path === candidate.file))),
     ].join('\n');
 }

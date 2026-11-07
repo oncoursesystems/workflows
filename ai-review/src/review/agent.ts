@@ -12,7 +12,16 @@ export type AgentRequest<T> = {
     maxBudgetUsd: number;
 };
 
-export type AgentRun<T> = { output: T; costUsd: number; turns: number };
+export type AgentStats = {
+    model: string;
+    costUsd: number;
+    turns: number;
+    durationMs: number;
+    tools: Record<string, number>;
+    denied: string[];
+};
+
+export type AgentRun<T> = { output: T; stats: AgentStats };
 
 export type RunAgent = <T>(request: AgentRequest<T>) => Promise<AgentRun<T>>;
 
@@ -24,7 +33,12 @@ export function outputSchema(schema: z.ZodType): Record<string, unknown> {
     return rest;
 }
 
+const deniedCall = ({ tool_name, tool_input }: { tool_name: string; tool_input: Record<string, unknown> }): string =>
+    typeof tool_input['command'] === 'string' ? `${tool_name}(${tool_input['command']})` : tool_name;
+
 export const runAgent: RunAgent = async <T>(request: AgentRequest<T>): Promise<AgentRun<T>> => {
+    const started = Date.now();
+    const tools: Record<string, number> = {};
     const session = query({
         prompt: request.prompt,
         options: {
@@ -43,13 +57,28 @@ export const runAgent: RunAgent = async <T>(request: AgentRequest<T>): Promise<A
         },
     });
     for await (const message of session) {
+        if (message.type === 'assistant') {
+            for (const block of message.message.content) {
+                if (block.type === 'tool_use') tools[block.name] = (tools[block.name] ?? 0) + 1;
+            }
+        }
         if (message.type !== 'result') continue;
         if (message.subtype !== 'success') {
             throw new Error(`${request.model} stopped with ${message.subtype}: ${message.errors.join('; ')}`);
         }
         const parsed = request.schema.safeParse(message.structured_output);
         if (!parsed.success) throw new Error(`${request.model} returned output that does not match the schema: ${parsed.error.message}`);
-        return { output: parsed.data, costUsd: message.total_cost_usd, turns: message.num_turns };
+        return {
+            output: parsed.data,
+            stats: {
+                model: request.model,
+                costUsd: message.total_cost_usd,
+                turns: message.num_turns,
+                durationMs: Date.now() - started,
+                tools,
+                denied: message.permission_denials.map(deniedCall),
+            },
+        };
     }
     throw new Error(`${request.model} ended without a result`);
 };

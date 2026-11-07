@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util';
 import { getOctokit } from '@actions/github';
 import { parsePullRequestNumber, parseRepo } from '../risk/github.ts';
 import { runAgent } from './agent.ts';
+import { renderAgentLog } from './report.ts';
 import { runReview } from './run.ts';
 
 const USAGE = `Usage: npm run review -- --repo <owner/repo> --pr <number> --dir <checkout> [--publish] [--continue]
@@ -32,8 +33,10 @@ if (values.help || values.repo === undefined || values.pr === undefined || value
 }
 
 const githubToken = process.env['GH_TOKEN'] || execFileSync('gh', ['auth', 'token'], { encoding: 'utf8' }).trim();
+const octokit = getOctokit(githubToken);
 const outcome = await runReview({
-    octokit: getOctokit(githubToken),
+    octokit,
+    checksOctokit: octokit,
     repo: parseRepo(values.repo),
     number: parsePullRequestNumber(values.pr),
     cwd: values.dir,
@@ -47,4 +50,5 @@ if (outcome.kind !== 'reviewed') {
 } else {
     console.log(JSON.stringify(outcome.result.findings, null, 2));
     console.log(`\n${outcome.summary}`);
+    console.log(`\n${renderAgentLog(outcome.result.agents)}`);
 }

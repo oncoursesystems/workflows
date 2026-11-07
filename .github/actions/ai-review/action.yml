@@ -1,12 +1,18 @@
 name: AI review
 description: >
   Review a pull request with Claude bug finders sized by its risk tier, check every candidate with three
-  adversarial reviewers, and post the confirmed findings. Trial run: the ai-review check is always neutral.
+  adversarial reviewers, and post the confirmed findings. The ai-review check is neutral, so it blocks nothing.
 
 inputs:
   github-token:
-    description: Token used to read the pull request and post the summary, the review comments, and the check.
+    description: Workflow token. It posts the ai-review check, and the comments too when no bot app is given.
     required: true
+  bot-app-id:
+    description: ID of the GitHub App that posts the summary and the review comments.
+    required: false
+  bot-app-private-key:
+    description: Private key of that GitHub App.
+    required: false
   claude-code-oauth-token:
     description: Claude Code OAuth token the agents run on.
     required: true
@@ -17,6 +23,14 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Create the bot token
+      id: bot
+      if: inputs.bot-app-id != '' && inputs.bot-app-private-key != ''
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: ${{ inputs.bot-app-id }}
+        private-key: ${{ inputs.bot-app-private-key }}
+
     - uses: actions/setup-node@v6
       with:
         node-version: 24
@@ -30,6 +44,7 @@ runs:
       shell: bash
       env:
         INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
+        INPUT_BOT-TOKEN: ${{ steps.bot.outputs.token }}
         INPUT_PULL-REQUEST: ${{ inputs.pull-request }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
       run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/review/action.ts"

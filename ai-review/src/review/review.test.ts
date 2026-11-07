@@ -4,6 +4,7 @@ import type { AgentRequest, AgentRun, RunAgent } from './agent.ts';
 import type { Candidate, FinderOutput, Verdict } from './finding.ts';
 import { tierFromLabels } from './github.ts';
 import { findersFor, MODELS, VERIFIER_MODEL } from './plan.ts';
+import { FINDER_RETRY_NOTE, verifierPrompt } from './prompts.ts';
 import { review } from './review.ts';
 
 const pr: PullRequest = {
@@ -27,7 +28,7 @@ const candidate = (line: number, claim: string): Candidate => ({
     failureScenario: 'wrong notes shown',
 });
 
-function fakeAgent(candidates: Candidate[], votesByClaim: Record<string, boolean[]>) {
+function fakeAgent(candidates: Candidate[], votesByClaim: Record<string, boolean[]>, finderTools: Record<string, number> = { Read: 2 }) {
     const requests: AgentRequest<unknown>[] = [];
     const voteIndex: Record<string, number> = {};
     let running = 0;
@@ -40,13 +41,18 @@ function fakeAgent(candidates: Candidate[], votesByClaim: Record<string, boolean
         running--;
         if (request.model !== VERIFIER_MODEL) {
             const output: FinderOutput = { candidates };
-            return { output: output as T, costUsd: 1, turns: 3 };
+            return { output: output as T, stats: { model: request.model, costUsd: 1, turns: 3, durationMs: 5, tools: finderTools, denied: [] } };
         }
         const claim = candidates.find((c) => request.prompt.includes(c.claim))?.claim ?? '';
         const index = voteIndex[claim] ?? 0;
         voteIndex[claim] = index + 1;
-        const verdict: Verdict = { real: votesByClaim[claim]?.[index] ?? false, introducedByPullRequest: true, reason: 'checked' };
-        return { output: verdict as T, costUsd: 0.1, turns: 2 };
+        const verdict: Verdict = {
+            real: votesByClaim[claim]?.[index] ?? false,
+            introducedByPullRequest: true,
+            severity: 'important',
+            reason: 'checked',
+        };
+        return { output: verdict as T, stats: { model: request.model, costUsd: 0.1, turns: 2, durationMs: 3, tools: {}, denied: [] } };
     };
     return { runAgent, requests, peak: () => peak };
 }
@@ -67,6 +73,12 @@ describe('review', () => {
         expect(result.findings.map((f) => `${f.claim}:${f.placement}`)).toEqual(['confirmed bug:inline', 'false alarm:dropped']);
         expect(result.candidates).toBe(2);
         expect(result.costUsd).toBeCloseTo(3 + 0.6);
+        expect(result.agents.map((agent) => agent.role).filter((role) => role.startsWith('finder'))).toEqual([
+            'finder: correctness',
+            'finder: contracts',
+            'finder: security',
+        ]);
+        expect(result.agents).toHaveLength(9);
     });
 
     it('never runs more agents at once than the limit', async () => {
@@ -80,6 +92,23 @@ describe('review', () => {
         await review({ ...input, tier: 'low' }, agent.runAgent);
         const firstVerifier = agent.requests.find((r) => r.model === VERIFIER_MODEL && r.prompt.includes('first claim'));
         expect(firstVerifier?.prompt).not.toContain('second claim');
+    });
+
+    it('runs a finder again, once, when it answered without opening a file', async () => {
+        const agent = fakeAgent([], {}, { StructuredOutput: 1 });
+        const result = await review({ ...input, tier: 'low' }, agent.runAgent);
+        const finders = agent.requests.filter((r) => r.model !== VERIFIER_MODEL);
+        expect(finders).toHaveLength(2);
+        expect(finders[0]?.prompt).not.toContain(FINDER_RETRY_NOTE);
+        expect(finders[1]?.prompt).toContain(FINDER_RETRY_NOTE);
+        expect(result.agents.map((a) => a.role)).toEqual(['finder: correctness, contracts, security', 'finder: correctness, contracts, security (retry)']);
+    });
+
+    it('gives the verifier code the pull request removed from other files, after the candidate file', () => {
+        const other = { path: 'src/Planner.js', status: 'modified', additions: 0, deletions: 1, patch: '@@ -1 +0,0 @@\n-setProvider(cookies)' };
+        const prompt = verifierPrompt(pr, [other, ...pr.files], candidate(1, 'cookies leak'));
+        expect(prompt).toContain('-setProvider(cookies)');
+        expect(prompt.indexOf('--- src/Notes.cs')).toBeLessThan(prompt.indexOf('--- src/Planner.js'));
     });
 });
 

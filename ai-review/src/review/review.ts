@@ -1,6 +1,6 @@
 import type { ChangedFile, PullRequest } from '../risk/pull-request.ts';
 import type { Tier } from '../risk/tier.ts';
-import type { RunAgent } from './agent.ts';
+import type { AgentStats, RunAgent } from './agent.ts';
 import {
     capSummaryFindings,
     dedupe,
@@ -11,7 +11,14 @@ import {
     type ReviewedFinding,
 } from './finding.ts';
 import { findersFor, VERIFIER_MODEL } from './plan.ts';
-import { finderPrompt, finderSystemPrompt, verifierPrompt, verifierSystemPrompt, type RepoRules } from './prompts.ts';
+import {
+    FINDER_RETRY_NOTE,
+    finderPrompt,
+    finderSystemPrompt,
+    verifierPrompt,
+    verifierSystemPrompt,
+    type RepoRules,
+} from './prompts.ts';
 
 export type ReviewInput = {
     pr: PullRequest;
@@ -22,10 +29,13 @@ export type ReviewInput = {
     cwd: string;
 };
 
+export type AgentReport = AgentStats & { role: string };
+
 export type ReviewResult = {
     tier: Tier;
     findings: ReviewedFinding[];
     candidates: number;
+    agents: AgentReport[];
     costUsd: number;
     durationMs: number;
 };
@@ -50,29 +60,38 @@ const limiter = (limit: number) => {
 export async function review(input: ReviewInput, runAgent: RunAgent, concurrency = MAX_CONCURRENT_AGENTS): Promise<ReviewResult> {
     const started = Date.now();
     const limit = limiter(concurrency);
-    let costUsd = 0;
-    const spend = <T extends { costUsd: number }>(run: T): T => {
-        costUsd += run.costUsd;
-        return run;
-    };
+    const agents: AgentReport[] = [];
+    const record =
+        (role: string) =>
+        <T extends { stats: AgentStats }>(run: T): T => {
+            agents.push({ role, ...run.stats });
+            return run;
+        };
 
     const finderRuns = await Promise.all(
         findersFor(input.tier).map((spec) =>
-            limit(() =>
-                runAgent({
+            limit(async () => {
+                const role = `finder: ${spec.kinds.join(', ')}`;
+                const request = {
                     model: spec.model,
                     systemPrompt: finderSystemPrompt(spec.kinds, input.rules),
                     prompt: finderPrompt(input.pr, input.files, input.scope),
                     schema: FinderOutput,
                     cwd: input.cwd,
-                    effort: 'high',
+                    effort: 'high' as const,
                     maxTurns: 60,
                     maxBudgetUsd: 8,
-                }).then(spend),
-            ),
+                };
+                const first = record(role)(await runAgent(request));
+                if ((first.stats.tools['Read'] ?? 0) > 0) return [first];
+                const retry = record(`${role} (retry)`)(
+                    await runAgent({ ...request, prompt: `${request.prompt}\n\n${FINDER_RETRY_NOTE}` }),
+                );
+                return [first, retry];
+            }),
         ),
     );
-    const candidates = dedupe(finderRuns.flatMap((run) => run.output.candidates));
+    const candidates = dedupe(finderRuns.flat().flatMap((run) => run.output.candidates));
 
     const reviewed = await Promise.all(
         candidates.map(async (candidate): Promise<ReviewedFinding> => {
@@ -88,12 +107,12 @@ export async function review(input: ReviewInput, runAgent: RunAgent, concurrency
                             effort: 'medium',
                             maxTurns: 25,
                             maxBudgetUsd: 1,
-                        }).then(spend),
+                        }).then(record(`reviewer: ${candidate.file}:${candidate.line}`)),
                     ),
                 ),
             );
             const votes = verdicts.map((run) => run.output);
-            return { ...candidate, verdicts: votes, placement: placement(candidate, votes) };
+            return { ...candidate, verdicts: votes, placement: placement(votes) };
         }),
     );
 
@@ -101,7 +120,8 @@ export async function review(input: ReviewInput, runAgent: RunAgent, concurrency
         tier: input.tier,
         findings: capSummaryFindings(reviewed),
         candidates: candidates.length,
-        costUsd,
+        agents,
+        costUsd: agents.reduce((sum, agent) => sum + agent.costUsd, 0),
         durationMs: Date.now() - started,
     };
 }
