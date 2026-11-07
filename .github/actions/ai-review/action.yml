@@ -1,0 +1,35 @@
+name: AI review
+description: >
+  Review a pull request with Claude bug finders sized by its risk tier, check every candidate with three
+  adversarial reviewers, and post the confirmed findings. Trial run: the ai-review check is always neutral.
+
+inputs:
+  github-token:
+    description: Token used to read the pull request and post the summary, the review comments, and the check.
+    required: true
+  claude-code-oauth-token:
+    description: Claude Code OAuth token the agents run on.
+    required: true
+  pull-request:
+    description: Number of the pull request to review. Used only when the event is not a pull_request event.
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 24
+
+    - name: Install the reviewer
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../../ai-review
+      run: npm ci --omit=dev --no-audit --no-fund
+
+    - name: Review the pull request
+      shell: bash
+      env:
+        INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
+        INPUT_PULL-REQUEST: ${{ inputs.pull-request }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+      run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/review/action.ts"

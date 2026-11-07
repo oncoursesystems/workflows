@@ -11,11 +11,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --maxWorkers=2",
     "build": "esbuild src/risk/action.ts --bundle --platform=node --target=node22 --format=cjs --outfile=../.github/actions/risk-tier/dist/index.js",
-    "risk": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/risk/cli.ts"
+    "risk": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/risk/cli.ts",
+    "review": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/review/cli.ts"
   },
   "dependencies": {
     "@actions/core": "3.0.1",
     "@actions/github": "9.1.1",
+    "@anthropic-ai/claude-agent-sdk": "0.3.317",
     "picomatch": "4.0.7",
     "yaml": "2.9.1",
     "zod": "4.6.7"
