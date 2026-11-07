@@ -45,9 +45,13 @@ The summary comment keeps the reviewed commit, the round and the tier. A later p
 
 **Optional** Number of the pull request to review. The action uses it only when the event is not a `pull_request` event, such as a `workflow_dispatch` run.
 
+### `start-over`
+
+**Optional** On a `workflow_dispatch` run, `true` reviews the whole pull request as round 1, and `false` continues from the last review the way a push does. With `false`, a pull request whose head commit was already reviewed is skipped, so a backfill does not pay twice for it. Default `true`.
+
 ## Usage
 
-The job must check out the pull request head first, because the agents read the repository from the workspace. See `ai-review.yml` in oncourse-systems for the workflow that runs it on pull requests labeled `ai-review`.
+The job must check out the pull request head first, because the agents read the repository from the workspace. See `ai-review.yml` in oncourse-systems for the workflow that runs it on every pull request that is not a draft, and for the command that backfills open pull requests.
 
 ## Run it locally
 
@@ -69,7 +73,7 @@ Every review leaves enough behind to score it later. Collect the data before the
 - **Review comments.** Each one hides `<!-- ai-review:finding <fingerprint> -->`. The same fingerprint is on the finding in the review record. Read the comments with `gh api repos/<owner>/<repo>/pulls/<number>/comments --paginate`, and their 👍 and 👎 counts in `reactions`.
 - **Resolved threads.** The GraphQL `pullRequest.reviewThreads` field has `isResolved` for each thread.
 - **Later commits.** `git log -L <line>,<line>:<file> <reviewedSha>..<merge commit>` shows whether the flagged line changed before the merge.
-- **The pull requests.** Search for the `ai-review` label: `gh pr list --label ai-review --state all`.
+- **The pull requests.** Every pull request with a review record, or with a comment that contains `<!-- ai-review:summary -->`.
 
 ### What to compute
 
