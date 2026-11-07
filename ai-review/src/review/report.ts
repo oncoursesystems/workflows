@@ -76,9 +76,10 @@ export type SummaryInput = {
     inline: readonly ReviewedFinding[];
     outsideDiff: readonly ReviewedFinding[];
     scope: string;
+    notes?: readonly string[];
 };
 
-export function renderSummary({ repo, result, state, inline, outsideDiff, scope }: SummaryInput): string {
+export function renderSummary({ repo, result, state, inline, outsideDiff, scope, notes = [] }: SummaryInput): string {
     const finders = findersFor(result.tier);
     const of = (placement: ReviewedFinding['placement']) => result.findings.filter((finding) => finding.placement === placement);
     const important = inline.length + outsideDiff.length;
@@ -95,6 +96,7 @@ export function renderSummary({ repo, result, state, inline, outsideDiff, scope 
         roundLine(state, scope, 'Reviewed'),
         `${result.tier[0]?.toUpperCase()}${result.tier.slice(1)} risk: ${plural(finders.length, 'bug finder')} on ` +
             `\`${finders[0]?.model ?? ''}\`, and 3 reviewers on \`${VERIFIER_MODEL}\` for each finding.`,
+        ...notes,
         '',
         headline,
         ...section('Important, outside the diff', repo, sha, outsideDiff),

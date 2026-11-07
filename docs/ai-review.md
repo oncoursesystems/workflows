@@ -6,7 +6,7 @@ The action reviews a pull request with Claude and posts the findings that surviv
 
 ## How a review runs
 
-1. The pull request's `risk:` label picks the bug finders. Without a label the tier is medium.
+1. The pull request's `risk:` label picks the bug finders. Without a label the tier is medium. On a `pull_request` event, the action first waits up to 5 minutes for the `risk-tier` check on the head commit, because risk-tier runs on the same push and may change the label. If the check has not finished by then, the review uses the label as it is and says so in the summary.
 
     | Tier | Bug finders |
     | --- | --- |
@@ -25,7 +25,7 @@ The action reviews a pull request with Claude and posts the findings that surviv
     - Each review comment asks the developer to react 👍 if the finding is a real problem or 👎 if it is wrong.
     - The run uploads a review record, a JSON artifact named `ai-review-<number>-round-<round>-<sha>`, kept for 90 days. It holds every candidate the reviewers saw, with their votes and reasons, where it was posted, and each agent's turns, tool calls, cost and time.
 
-The summary comment keeps the reviewed commit and the round. A later push reviews only the changes since that commit. After 3 rounds the review stops.
+The summary comment keeps the reviewed commit, the round and the tier. A later push reviews only the changes since that commit, at the current tier. After 3 rounds the review stops. If the tier has risen since the last review, the next run reviews the whole pull request again at the new tier as round 1, even after round 3. A tier that drops does not restart the review.
 
 ## Inputs
 

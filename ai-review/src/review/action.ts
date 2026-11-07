@@ -33,6 +33,7 @@ async function run(): Promise<void> {
             number,
             cwd: process.env['GITHUB_WORKSPACE'] ?? process.cwd(),
             fresh,
+            awaitRiskTier: context.eventName === 'pull_request',
             publish: true,
             runAgent,
         });

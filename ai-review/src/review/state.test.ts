@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fingerprint, fingerprintMarker, fingerprintsIn, readState, renderState, rightSideLines } from './state.ts';
+import { fingerprint, fingerprintMarker, fingerprintsIn, MAX_ROUNDS, planRound, readState, renderState, rightSideLines } from './state.ts';
 
 describe('review state', () => {
     it('reads back the state it renders inside a summary', () => {
@@ -36,5 +36,30 @@ describe('rightSideLines', () => {
 
     it('has no lines for a file without a patch', () => {
         expect(rightSideLines(undefined).size).toBe(0);
+    });
+});
+
+describe('planRound', () => {
+    const low = { reviewedSha: 'old', round: 1, tier: 'low' as const };
+
+    it('starts over on the whole pull request when the risk tier rises, even after the last round', () => {
+        expect(planRound(low, 'new', 'high')).toEqual({ kind: 'review', previous: undefined, restartReason: 'the risk tier rose from low to high' });
+        expect(planRound({ ...low, round: MAX_ROUNDS }, 'new', 'medium')).toMatchObject({ kind: 'review', previous: undefined });
+    });
+
+    it('keeps going from the last round when the tier stays or drops', () => {
+        expect(planRound(low, 'new', 'low')).toEqual({ kind: 'review', previous: low });
+        expect(planRound({ ...low, tier: 'high' }, 'new', 'low')).toEqual({ kind: 'review', previous: { ...low, tier: 'high' } });
+    });
+
+    it('stops at the round limit and skips a commit it already reviewed', () => {
+        expect(planRound({ ...low, round: MAX_ROUNDS }, 'new', 'low')).toEqual({ kind: 'round-limit', state: { ...low, round: MAX_ROUNDS } });
+        expect(planRound(low, 'old', 'low')).toEqual({ kind: 'up-to-date' });
+    });
+
+    it('does not restart a review whose summary predates the recorded tier', () => {
+        const untiered = readState(renderState({ reviewedSha: 'old', round: 1 }));
+        expect(untiered).toEqual({ reviewedSha: 'old', round: 1 });
+        expect(planRound(untiered, 'new', 'high')).toEqual({ kind: 'review', previous: untiered });
     });
 });
