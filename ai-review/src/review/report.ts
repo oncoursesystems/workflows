@@ -44,7 +44,7 @@ export function renderSummary({ result, state, inline, outsideDiff, scope }: Sum
         inline.length + outsideDiff.length === 0
             ? 'No important findings.'
             : `**${inline.length + outsideDiff.length} important** finding${inline.length + outsideDiff.length === 1 ? '' : 's'}` +
-              (inline.length > 0 ? `, ${inline.length} posted as review comments.` : '.');
+              (inline.length === 0 ? '.' : `, ${inline.length} posted as review comment${inline.length === 1 ? '' : 's'}.`);
     return [
         SUMMARY_MARKER,
         '## AI review (trial run)',
