@@ -19,6 +19,12 @@ inputs:
   pull-request:
     description: Number of the pull request to review. Used only when the event is not a pull_request event.
     required: false
+  start-over:
+    description: >
+      On a workflow_dispatch run, review the whole pull request as round 1. Set it to false to continue from the
+      last review instead, which skips a pull request whose head was already reviewed.
+    required: false
+    default: 'true'
 
 runs:
   using: composite
@@ -41,10 +47,20 @@ runs:
       run: npm ci --omit=dev --no-audit --no-fund
 
     - name: Review the pull request
+      id: review
       shell: bash
       env:
         INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
         INPUT_BOT-TOKEN: ${{ steps.bot.outputs.token }}
         INPUT_PULL-REQUEST: ${{ inputs.pull-request }}
+        INPUT_START-OVER: ${{ inputs.start-over }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
       run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/review/action.ts"
+
+    - name: Keep the review record
+      if: steps.review.outputs.record != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.review.outputs.record-name }}
+        path: ${{ steps.review.outputs.record }}
+        retention-days: 90

@@ -1,12 +1,14 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
 import { fetchPullRequest, parsePullRequestNumber } from '../risk/github.ts';
 import { runAgent } from './agent.ts';
 import { postCheck } from './github.ts';
+import { reviewRecord } from './record.ts';
 import { renderAgentLog } from './report.ts';
-import { runReview } from './run.ts';
-
-const FRESH_EVENTS = new Set(['labeled', 'workflow_dispatch']);
+import { runReview, startsOver } from './run.ts';
 
 async function run(): Promise<void> {
     const input = core.getInput('pull-request');
@@ -19,7 +21,7 @@ async function run(): Promise<void> {
     const checksOctokit = getOctokit(core.getInput('github-token', { required: true }));
     const botToken = core.getInput('bot-token');
     const octokit = botToken === '' ? checksOctokit : getOctokit(botToken);
-    const fresh = FRESH_EVENTS.has(context.payload.action ?? context.eventName);
+    const fresh = startsOver(context.eventName, core.getInput('start-over'));
 
     try {
         const outcome = await runReview({
@@ -29,6 +31,7 @@ async function run(): Promise<void> {
             number,
             cwd: process.env['GITHUB_WORKSPACE'] ?? process.cwd(),
             fresh,
+            awaitRiskTier: context.eventName === 'pull_request',
             publish: true,
             runAgent,
         });
@@ -37,6 +40,12 @@ async function run(): Promise<void> {
             const agentLog = renderAgentLog(outcome.result.agents);
             core.info(agentLog);
             await core.summary.addRaw(outcome.summary).addCodeBlock(agentLog).write();
+            const dir = join(process.env['RUNNER_TEMP'] ?? tmpdir(), 'ai-review-record');
+            const path = join(dir, `${number}-round-${outcome.state.round}.json`);
+            await mkdir(dir, { recursive: true });
+            await writeFile(path, JSON.stringify(reviewRecord(outcome, new Date()), null, 2));
+            core.setOutput('record', path);
+            core.setOutput('record-name', `ai-review-${number}-round-${outcome.state.round}-${outcome.state.reviewedSha.slice(0, 7)}`);
         }
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

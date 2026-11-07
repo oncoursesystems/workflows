@@ -96,6 +96,23 @@ export async function postInline(octokit: Octokit, repo: RepoRef, number: number
     });
 }
 
+export type Wait = { attempts: number; intervalMs: number; sleep: (ms: number) => Promise<void> };
+
+const RISK_TIER_WAIT: Wait = {
+    attempts: 30,
+    intervalMs: 10_000,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+};
+
+export async function waitForRiskTier(octokit: Octokit, repo: RepoRef, headSha: string, wait = RISK_TIER_WAIT): Promise<boolean> {
+    for (let attempt = 1; ; attempt++) {
+        const { data } = await octokit.rest.checks.listForRef({ ...repo, ref: headSha, check_name: 'risk-tier' });
+        if (data.check_runs.some((run) => run.status === 'completed')) return true;
+        if (attempt >= wait.attempts) return false;
+        await wait.sleep(wait.intervalMs);
+    }
+}
+
 export async function postCheck(octokit: Octokit, repo: RepoRef, headSha: string, title: string, summary: string) {
     await octokit.rest.checks.create({
         ...repo,

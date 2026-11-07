@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ReviewedFinding } from './finding.ts';
 import { inlineBody, MINOR_HEADINGS, minorHeading, renderFailed, renderRunning, renderSummary } from './report.ts';
 import type { ReviewResult } from './review.ts';
+import { describeScope, startsOver } from './run.ts';
 import { readState } from './state.ts';
 
 const finding = (placement: ReviewedFinding['placement'], line: number): ReviewedFinding => ({
@@ -76,5 +77,24 @@ describe('renderFailed', () => {
         const failed = renderFailed(state, 'claude-opus-5-5 stopped with error_max_turns', previous);
         expect(failed).toContain('`abcdef1` did not finish: claude-opus-5-5 stopped with error_max_turns');
         expect(readState(failed)).toEqual(previous);
+    });
+});
+
+describe('summary notes and scope', () => {
+    it('shows a note under the tier line and says why a review covers the whole pull request', () => {
+        const note = 'The `risk-tier` check had not finished, so this review used the `risk:medium` label as it was.';
+        const scope = describeScope({ kind: 'full', reason: 'the risk tier rose from low to high' });
+        const summary = renderSummary({ repo: 'o/r', result, state, inline: [], outsideDiff: [], scope, notes: [note] });
+        expect(summary).toContain(`for each finding.\n${note}\n`);
+        expect(summary).toContain('`abcdef1`, the whole pull request, because the risk tier rose from low to high (round 2 of 3).');
+    });
+});
+
+describe('startsOver', () => {
+    it('starts over only on a run by hand, unless the run asks to continue', () => {
+        expect(startsOver('workflow_dispatch', 'true')).toBe(true);
+        expect(startsOver('workflow_dispatch', '')).toBe(true);
+        expect(startsOver('workflow_dispatch', 'false')).toBe(false);
+        expect(startsOver('pull_request', 'true')).toBe(false);
     });
 });
