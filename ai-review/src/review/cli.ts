@@ -41,6 +41,7 @@ const outcome = await runReview({
     number: parsePullRequestNumber(values.pr),
     cwd: values.dir,
     fresh: !values.continue,
+    awaitRiskTier: false,
     publish: values.publish,
     runAgent,
 });

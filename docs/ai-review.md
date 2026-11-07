@@ -6,7 +6,7 @@ The action reviews a pull request with Claude and posts the findings that surviv
 
 ## How a review runs
 
-1. The pull request's `risk:` label picks the bug finders. Without a label the tier is medium.
+1. The pull request's `risk:` label picks the bug finders. Without a label the tier is medium. On a `pull_request` event, the action first waits up to 5 minutes for the `risk-tier` check on the head commit, because risk-tier runs on the same push and may change the label. If the check has not finished by then, the review uses the label as it is and says so in the summary.
 
     | Tier | Bug finders |
     | --- | --- |
@@ -25,7 +25,7 @@ The action reviews a pull request with Claude and posts the findings that surviv
     - Each review comment asks the developer to react 👍 if the finding is a real problem or 👎 if it is wrong.
     - The run uploads a review record, a JSON artifact named `ai-review-<number>-round-<round>-<sha>`, kept for 90 days. It holds every candidate the reviewers saw, with their votes and reasons, where it was posted, and each agent's turns, tool calls, cost and time.
 
-The summary comment keeps the reviewed commit and the round. A later push reviews only the changes since that commit. After 3 rounds the review stops.
+The summary comment keeps the reviewed commit, the round and the tier. A later push reviews only the changes since that commit, at the current tier. After 3 rounds the review stops. If the tier has risen since the last review, the next run reviews the whole pull request again at the new tier as round 1, even after round 3. A tier that drops does not restart the review.
 
 ## Inputs
 
@@ -45,9 +45,13 @@ The summary comment keeps the reviewed commit and the round. A later push review
 
 **Optional** Number of the pull request to review. The action uses it only when the event is not a `pull_request` event, such as a `workflow_dispatch` run.
 
+### `start-over`
+
+**Optional** On a `workflow_dispatch` run, `true` reviews the whole pull request as round 1, and `false` continues from the last review the way a push does. With `false`, a pull request whose head commit was already reviewed is skipped, so a backfill does not pay twice for it. Default `true`.
+
 ## Usage
 
-The job must check out the pull request head first, because the agents read the repository from the workspace. See `ai-review.yml` in oncourse-systems for the workflow that runs it on pull requests labeled `ai-review`.
+The job must check out the pull request head first, because the agents read the repository from the workspace. See `ai-review.yml` in oncourse-systems for the workflow that runs it on every pull request that is not a draft, and for the command that backfills open pull requests.
 
 ## Run it locally
 
@@ -69,7 +73,7 @@ Every review leaves enough behind to score it later. Collect the data before the
 - **Review comments.** Each one hides `<!-- ai-review:finding <fingerprint> -->`. The same fingerprint is on the finding in the review record. Read the comments with `gh api repos/<owner>/<repo>/pulls/<number>/comments --paginate`, and their 👍 and 👎 counts in `reactions`.
 - **Resolved threads.** The GraphQL `pullRequest.reviewThreads` field has `isResolved` for each thread.
 - **Later commits.** `git log -L <line>,<line>:<file> <reviewedSha>..<merge commit>` shows whether the flagged line changed before the merge.
-- **The pull requests.** Search for the `ai-review` label: `gh pr list --label ai-review --state all`.
+- **The pull requests.** Every pull request with a review record, or with a comment that contains `<!-- ai-review:summary -->`.
 
 ### What to compute
 

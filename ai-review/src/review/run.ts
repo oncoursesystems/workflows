@@ -12,11 +12,12 @@ import {
     postInline,
     tierFromLabels,
     upsertSummary,
+    waitForRiskTier,
     type Summary,
 } from './github.ts';
 import { checkTitle, inlineBody, renderFailed, renderRoundLimit, renderRunning, renderSummary } from './report.ts';
 import { review, type ReviewResult } from './review.ts';
-import { fingerprint, MAX_ROUNDS, readState, rightSideLines, type ReviewState } from './state.ts';
+import { fingerprint, planRound, readState, rightSideLines, type ReviewState } from './state.ts';
 
 export type RunOptions = {
     octokit: Octokit;
@@ -25,11 +26,12 @@ export type RunOptions = {
     number: number;
     cwd: string;
     fresh: boolean;
+    awaitRiskTier: boolean;
     publish: boolean;
     runAgent: RunAgent;
 };
 
-export type Scope = { kind: 'full' } | { kind: 'since'; fromSha: string; files: ChangedFile[] };
+export type Scope = { kind: 'full'; reason?: string } | { kind: 'since'; fromSha: string; files: ChangedFile[] };
 
 export type RunOutcome =
     | { kind: 'draft' }
@@ -46,11 +48,16 @@ export type RunOutcome =
           summary: string;
       };
 
-export const describeScope = (scope: Scope): string =>
-    scope.kind === 'full' ? 'the whole pull request' : `the changes since \`${scope.fromSha.slice(0, 7)}\``;
+export const startsOver = (eventName: string, startOverInput: string): boolean =>
+    eventName === 'workflow_dispatch' && startOverInput !== 'false';
 
-async function chooseScope(options: RunOptions, pr: PullRequest, previous: ReviewState | undefined): Promise<Scope> {
-    if (options.fresh || previous === undefined) return { kind: 'full' };
+export function describeScope(scope: Scope): string {
+    if (scope.kind === 'since') return `the changes since \`${scope.fromSha.slice(0, 7)}\``;
+    return scope.reason === undefined ? 'the whole pull request' : `the whole pull request, because ${scope.reason}`;
+}
+
+async function chooseScope(options: RunOptions, pr: PullRequest, previous: ReviewState | undefined, reason?: string): Promise<Scope> {
+    if (previous === undefined) return reason === undefined ? { kind: 'full' } : { kind: 'full', reason };
     const files = await filesSince(options.octokit, options.repo, previous.reviewedSha, pr.headSha);
     return files === undefined ? { kind: 'full' } : { kind: 'since', fromSha: previous.reviewedSha, files };
 }
@@ -68,26 +75,31 @@ export async function runReview(options: RunOptions): Promise<RunOutcome> {
     if (pr.draft) return { kind: 'draft' };
 
     const existing: Summary | undefined = await findSummary(octokit, repo, number);
-    const previous = options.fresh ? undefined : readState(existing?.body);
-    if (previous?.reviewedSha === pr.headSha) return { kind: 'up-to-date', sha: pr.headSha };
-
-    if (previous !== undefined && previous.round >= MAX_ROUNDS) {
-        if (options.publish) await upsertSummary(octokit, repo, number, existing, renderRoundLimit(previous));
-        return { kind: 'round-limit', state: previous };
+    const tierSettled = options.awaitRiskTier ? await waitForRiskTier(options.checksOctokit, repo, pr.headSha) : true;
+    const tier = tierFromLabels(await fetchLabels(octokit, repo, number));
+    const plan = planRound(options.fresh ? undefined : readState(existing?.body), pr.headSha, tier);
+    if (plan.kind === 'up-to-date') return { kind: 'up-to-date', sha: pr.headSha };
+    if (plan.kind === 'round-limit') {
+        if (options.publish) await upsertSummary(octokit, repo, number, existing, renderRoundLimit(plan.state));
+        return { kind: 'round-limit', state: plan.state };
     }
 
-    const scope = await chooseScope(options, pr, previous);
-    const state: ReviewState = { reviewedSha: pr.headSha, round: (previous?.round ?? 0) + 1 };
+    const { previous } = plan;
+    const scope = await chooseScope(options, pr, previous, plan.restartReason);
+    const state: ReviewState = { reviewedSha: pr.headSha, round: (previous?.round ?? 0) + 1, tier };
+    const notes = tierSettled
+        ? []
+        : [`The \`risk-tier\` check had not finished, so this review used the \`risk:${tier}\` label as it was.`];
     const summaryComment = options.publish
         ? await upsertSummary(octokit, repo, number, existing, renderRunning(state, describeScope(scope), previous))
         : existing;
     let result: ReviewResult;
     try {
-        const [labels, rules] = await Promise.all([fetchLabels(octokit, repo, number), fetchRules(octokit, repo, pr.baseRef)]);
+        const rules = await fetchRules(octokit, repo, pr.baseRef);
         result = await review(
             {
                 pr,
-                tier: tierFromLabels(labels),
+                tier,
                 files: scope.kind === 'full' ? pr.files : scope.files,
                 scope: describeScope(scope),
                 rules,
@@ -102,7 +114,7 @@ export async function runReview(options: RunOptions): Promise<RunOutcome> {
     }
 
     const { inline, outsideDiff } = splitInline(result.findings, pr);
-    const summary = renderSummary({ repo: pr.repo, result, state, inline, outsideDiff, scope: describeScope(scope) });
+    const summary = renderSummary({ repo: pr.repo, result, state, inline, outsideDiff, scope: describeScope(scope), notes });
     const outcome: RunOutcome = { kind: 'reviewed', pr, scope: describeScope(scope), result, state, inline, outsideDiff, summary };
     if (!options.publish) return outcome;
 
