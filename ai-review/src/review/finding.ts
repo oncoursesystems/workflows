@@ -19,6 +19,11 @@ export type Candidate = z.infer<typeof Candidate>;
 export const FinderOutput = z.object({ candidates: z.array(Candidate) });
 export type FinderOutput = z.infer<typeof FinderOutput>;
 
+export const DuplicateGroups = z.object({
+    groups: z.array(z.object({ candidates: z.array(z.number().int().nonnegative()), fix: z.string().min(1) })),
+});
+export type DuplicateGroups = z.infer<typeof DuplicateGroups>;
+
 export const Verdict = z.object({
     real: z.boolean(),
     introducedByPullRequest: z.boolean(),
@@ -68,4 +73,13 @@ export function dedupe(candidates: readonly Candidate[]): Candidate[] {
         if (!duplicate) kept.push(candidate);
     }
     return kept;
+}
+
+export function mergeDuplicates(candidates: readonly Candidate[], { groups }: DuplicateGroups): Candidate[] {
+    const dropped = new Set<number>();
+    for (const group of groups) {
+        const members = [...new Set(group.candidates)].filter((index) => index < candidates.length).sort((a, b) => a - b);
+        for (const index of members.slice(1)) dropped.add(index);
+    }
+    return candidates.filter((_, index) => !dropped.has(index));
 }

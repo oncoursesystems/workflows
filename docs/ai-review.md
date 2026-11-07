@@ -15,8 +15,9 @@ The action reviews a pull request with Claude and posts the findings that surviv
     | High | 3 `claude-opus-5-5` agents, one per kind |
 
 2. Each bug finder reads the diff, `CLAUDE.md` and `REVIEW.md` from the base branch, and the repository at the pull request head. It has only `Read`, `Grep`, `Glob`, and read-only `git` commands, and it returns candidates in a fixed JSON schema. It cannot post anything. A bug finder that answers without reading a file runs once more, with a note that tells it to read the changed files.
-3. Three `claude-haiku-5-5` reviewers check each candidate in fresh contexts. Each gets the claim and the whole diff, with the candidate's file first, but not the bug finder's reasoning. A candidate survives when 2 of 3 say it is real. The reviewers also judge its severity against `REVIEW.md`: it is Important when at least half of the reviewers who confirmed it say so, and Minor otherwise.
-4. The action, not Claude, posts the results:
+3. Candidates on the same file within 5 lines of each other merge, keeping the Important one. When 2 or more candidates remain, one `claude-sonnet-5-5` agent groups the ones that a single edit in one place would fix, and only the first of each group goes on. The same mistake in two methods stays as two candidates.
+4. Three `claude-haiku-5-5` reviewers check each candidate in fresh contexts. Each gets the claim and the whole diff, with the candidate's file first, but not the bug finder's reasoning. A candidate survives when 2 of 3 say it is real. The reviewers also judge its severity against `REVIEW.md`: it is Important when at least half of the reviewers who confirmed it say so, and Minor otherwise.
+5. The action, not Claude, posts the results:
     - When a run starts, the summary comment says the review is running. The action edits that same comment with the results, or with the error when the review fails.
     - Important findings on a line in the diff become review comments. A finding is never posted twice.
     - Important findings outside the diff, up to 3 Minor findings, and up to 2 pre-existing findings go in the summary comment, each with a link to its line. The heading over the Minor findings rotates per review, from `MINOR_HEADINGS` in `report.ts`, and stays the same for the same commit.

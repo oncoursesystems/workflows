@@ -94,6 +94,25 @@ export const FINDER_RETRY_NOTE =
     'Your last review of this pull request returned without opening a file. Read the changed files in full ' +
     'and search for related code before you answer.';
 
+export const MERGER_SYSTEM_PROMPT = [
+    'Several reviewers looked at the same pull request on their own, so some of their candidate bugs may be the same ' +
+        'defect reported twice, at different lines or as a different kind.',
+    'Group candidates only when one edit in one place fixes all of them, such as two reports of one missing guard ' +
+        'that cite the guard and its caller. The same mistake made in two methods is two defects, because each ' +
+        'method needs its own fix. Two different bugs in the same code are not the same defect either.',
+    'For each group, name the one edit that fixes every candidate in it. If you cannot name a single edit in a ' +
+        'single place, it is not a group. Return only groups of 2 or more candidate numbers. When you are not sure, ' +
+        'do not group them. Answer from the list. You do not need to open files.',
+].join('\n');
+
+export function mergerPrompt(candidates: readonly Candidate[]): string {
+    return candidates
+        .map((candidate, index) =>
+            [`<candidate number="${index}">`, `${candidate.file}:${candidate.line} (${candidate.kind})`, candidate.claim, '</candidate>'].join('\n'),
+        )
+        .join('\n');
+}
+
 export function verifierSystemPrompt(rules: RepoRules): string {
     return [
         'You check one candidate bug that another reviewer found in a pull request. Your job is to prove it wrong.',

@@ -4,17 +4,21 @@ import type { AgentStats, RunAgent } from './agent.ts';
 import {
     capSummaryFindings,
     dedupe,
+    DuplicateGroups,
     FinderOutput,
+    mergeDuplicates,
     placement,
     Verdict,
     VERIFIERS_PER_CANDIDATE,
     type ReviewedFinding,
 } from './finding.ts';
-import { findersFor, VERIFIER_MODEL } from './plan.ts';
+import { findersFor, MERGER_MODEL, VERIFIER_MODEL } from './plan.ts';
 import {
     FINDER_RETRY_NOTE,
     finderPrompt,
     finderSystemPrompt,
+    MERGER_SYSTEM_PROMPT,
+    mergerPrompt,
     verifierPrompt,
     verifierSystemPrompt,
     type RepoRules,
@@ -91,7 +95,25 @@ export async function review(input: ReviewInput, runAgent: RunAgent, concurrency
             }),
         ),
     );
-    const candidates = dedupe(finderRuns.flat().flatMap((run) => run.output.candidates));
+    const nearby = dedupe(finderRuns.flat().flatMap((run) => run.output.candidates));
+    const candidates =
+        nearby.length < 2
+            ? nearby
+            : mergeDuplicates(
+                  nearby,
+                  record('merger')(
+                      await runAgent({
+                          model: MERGER_MODEL,
+                          systemPrompt: MERGER_SYSTEM_PROMPT,
+                          prompt: mergerPrompt(nearby),
+                          schema: DuplicateGroups,
+                          cwd: input.cwd,
+                          effort: 'medium',
+                          maxTurns: 5,
+                          maxBudgetUsd: 1,
+                      }),
+                  ).output,
+              );
 
     const reviewed = await Promise.all(
         candidates.map(async (candidate): Promise<ReviewedFinding> => {

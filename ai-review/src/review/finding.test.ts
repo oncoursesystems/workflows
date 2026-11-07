@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { capSummaryFindings, dedupe, placement, type Candidate, type ReviewedFinding, type Verdict } from './finding.ts';
+import { capSummaryFindings, dedupe, mergeDuplicates, placement, type Candidate, type ReviewedFinding, type Verdict } from './finding.ts';
 
 const candidate = (overrides: Partial<Candidate> = {}): Candidate => ({
     kind: 'correctness',
@@ -72,5 +72,18 @@ describe('dedupe', () => {
             'src/Notes.cs:60:important',
             'src/Other.cs:40:important',
         ]);
+    });
+});
+
+describe('mergeDuplicates', () => {
+    const list = [candidate({ line: 42 }), candidate({ line: 77 }), candidate({ line: 90 }), candidate({ line: 120 })];
+
+    it('keeps the first candidate of each group, so an important one listed first wins', () => {
+        expect(mergeDuplicates(list, { groups: [{ candidates: [1, 0], fix: 'f' }, { candidates: [2, 3], fix: 'f' }] }).map((c) => c.line)).toEqual([42, 90]);
+    });
+
+    it('ignores indexes outside the list and keeps everything when there are no groups', () => {
+        expect(mergeDuplicates(list, { groups: [{ candidates: [3, 9], fix: 'f' }] }).map((c) => c.line)).toEqual([42, 77, 90, 120]);
+        expect(mergeDuplicates(list, { groups: [] })).toHaveLength(4);
     });
 });
