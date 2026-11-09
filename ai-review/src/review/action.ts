@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
 import { fetchPullRequest, parsePullRequestNumber } from '../risk/github.ts';
-import { runAgent } from './agent.ts';
+import { runAgent, UsageLimitError } from './agent.ts';
 import { postCheck } from './github.ts';
 import { reviewRecord } from './record.ts';
 import { renderAgentLog } from './report.ts';
@@ -50,6 +50,11 @@ async function run(): Promise<void> {
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const pr = await fetchPullRequest(checksOctokit, context.repo, number);
+        if (error instanceof UsageLimitError) {
+            await postCheck(checksOctokit, context.repo, pr.headSha, 'Claude usage limit', `The AI review did not run: ${message}`);
+            core.warning(message);
+            return;
+        }
         await postCheck(checksOctokit, context.repo, pr.headSha, 'The review failed', `The AI review did not finish: ${message}`);
         core.setFailed(message);
     }

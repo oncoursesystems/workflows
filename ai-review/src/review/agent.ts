@@ -33,7 +33,11 @@ export function outputSchema(schema: z.ZodType): Record<string, unknown> {
     return rest;
 }
 
-const deniedCall = ({ tool_name, tool_input }: { tool_name: string; tool_input: Record<string, unknown> }): string =>
+export class UsageLimitError extends Error {
+    override name = 'UsageLimitError';
+}
+
+const deniedCall =({ tool_name, tool_input }: { tool_name: string; tool_input: Record<string, unknown> }): string =>
     typeof tool_input['command'] === 'string' ? `${tool_name}(${tool_input['command']})` : tool_name;
 
 export const runAgent: RunAgent = async <T>(request: AgentRequest<T>): Promise<AgentRun<T>> => {
@@ -56,7 +60,11 @@ export const runAgent: RunAgent = async <T>(request: AgentRequest<T>): Promise<A
             outputFormat: { type: 'json_schema', schema: outputSchema(request.schema) },
         },
     });
+    let limit: string | undefined;
     for await (const message of session) {
+        if (message.type === 'rate_limit_event' && message.rate_limit_info.status === 'rejected') {
+            limit = message.rate_limit_info.rateLimitType ?? 'usage';
+        }
         if (message.type === 'assistant') {
             for (const block of message.message.content) {
                 if (block.type === 'tool_use') tools[block.name] = (tools[block.name] ?? 0) + 1;
@@ -66,6 +74,8 @@ export const runAgent: RunAgent = async <T>(request: AgentRequest<T>): Promise<A
         if (message.subtype !== 'success') {
             throw new Error(`${request.model} stopped with ${message.subtype}: ${message.errors.join('; ')}`);
         }
+        if (limit !== undefined) throw new UsageLimitError(`Claude hit its ${limit} limit: ${message.result}`);
+        if (message.is_error) throw new Error(`${request.model} stopped with an error: ${message.result}`);
         const parsed = request.schema.safeParse(message.structured_output);
         if (!parsed.success) throw new Error(`${request.model} returned output that does not match the schema: ${parsed.error.message}`);
         return {
