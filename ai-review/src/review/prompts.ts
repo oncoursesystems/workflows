@@ -91,7 +91,7 @@ export function finderPrompt(pr: PullRequest, files: readonly ChangedFile[], sco
 }
 
 export const FINDER_RETRY_NOTE =
-    'Your last review of this pull request returned without opening a file. Read the changed files in full ' +
+    'Your last review of this pull request returned without looking at any code. Read the changed files in full ' +
     'and search for related code before you answer.';
 
 export const MERGER_SYSTEM_PROMPT = [

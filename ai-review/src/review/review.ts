@@ -46,6 +46,8 @@ export type ReviewResult = {
 
 export const MAX_CONCURRENT_AGENTS = 4;
 
+const lookedAtCode = (tools: Record<string, number>): boolean => Object.keys(tools).some((name) => name !== 'StructuredOutput');
+
 const limiter = (limit: number) => {
     let running = 0;
     const waiting: Array<() => void> = [];
@@ -87,7 +89,7 @@ export async function review(input: ReviewInput, runAgent: RunAgent, concurrency
                     maxBudgetUsd: 8,
                 };
                 const first = record(role)(await runAgent(request));
-                if ((first.stats.tools['Read'] ?? 0) > 0) return [first];
+                if (lookedAtCode(first.stats.tools)) return [first];
                 const retry = record(`${role} (retry)`)(
                     await runAgent({ ...request, prompt: `${request.prompt}\n\n${FINDER_RETRY_NOTE}` }),
                 );
