@@ -133,6 +133,12 @@ describe('review', () => {
         expect(result.agents.map((a) => a.role)).toEqual(['finder: correctness, contracts, security', 'finder: correctness, contracts, security (retry)']);
     });
 
+    it('does not run a finder again when it looked at the code with git or Grep instead of Read', async () => {
+        const agent = fakeAgent([], {}, { finderTools: { Bash: 4, StructuredOutput: 1 } });
+        await review({ ...input, tier: 'low' }, agent.runAgent);
+        expect(agent.requests.filter((r) => r.schema === FinderOutput)).toHaveLength(1);
+    });
+
     it('gives the verifier code the pull request removed from other files, after the candidate file', () => {
         const other = { path: 'src/Planner.js', status: 'modified', additions: 0, deletions: 1, patch: '@@ -1 +0,0 @@\n-setProvider(cookies)' };
         const prompt = verifierPrompt(pr, [other, ...pr.files], candidate(1, 'cookies leak'));
