@@ -90,29 +90,55 @@ describe('runAgentWithApiFallback', () => {
         process.env['ANTHROPIC_API_KEY'] = 'stray-runner-key';
     });
 
-    it('runs on the subscription while it has room', async () => {
+    const fallback = (apiOnly = false) => {
+        let exchanges = 0;
+        const runner = runAgentWithApiFallback({
+            apiOnly,
+            apiToken: async () => {
+                exchanges++;
+                return 'sk-ant-oat01-minted';
+            },
+        });
+        return { runner, exchanges: () => exchanges };
+    };
+
+    it('runs on the subscription while it has room, and never exchanges a token', async () => {
         sessions = [[answered]];
-        const run = await runAgentWithApiFallback('sk-key')(request);
+        const { runner, exchanges } = fallback();
+        const run = await runner(request);
         expect(run.stats.billing).toBe('subscription');
         expect(envs[0]?.['CLAUDE_CODE_OAUTH_TOKEN']).toBe('oauth');
         expect(envs[0]?.['ANTHROPIC_API_KEY']).toBeUndefined();
+        expect(envs[0]?.['ANTHROPIC_AUTH_TOKEN']).toBeUndefined();
+        expect(exchanges()).toBe(0);
     });
 
-    it('reruns the agent on the API key without the OAuth token after a usage limit, and keeps the rest of the run there', async () => {
+    it('reruns the agent on the API after a usage limit, exchanges once, and keeps the rest of the run there', async () => {
         sessions = [limited, [answered], [answered]];
-        const runAgentForReview = runAgentWithApiFallback('sk-key');
-        const first = await runAgentForReview(request);
-        const second = await runAgentForReview(request);
-        expect([first.stats.billing, second.stats.billing]).toEqual(['api-key', 'api-key']);
+        const { runner, exchanges } = fallback();
+        const first = await runner(request);
+        const second = await runner(request);
+        expect([first.stats.billing, second.stats.billing]).toEqual(['api', 'api']);
         expect(envs).toHaveLength(3);
-        expect(envs[1]?.['ANTHROPIC_API_KEY']).toBe('sk-key');
+        expect(envs[1]?.['ANTHROPIC_AUTH_TOKEN']).toBe('sk-ant-oat01-minted');
         expect(envs[1]?.['CLAUDE_CODE_OAUTH_TOKEN']).toBeUndefined();
-        expect(envs[2]?.['ANTHROPIC_API_KEY']).toBe('sk-key');
+        expect(envs[1]?.['ANTHROPIC_API_KEY']).toBeUndefined();
+        expect(envs[2]?.['ANTHROPIC_AUTH_TOKEN']).toBe('sk-ant-oat01-minted');
+        expect(exchanges()).toBe(1);
     });
 
-    it('does not switch to the API key for any other error', async () => {
-        sessions = [[result({ is_error: true, result: 'API Error: 529 overloaded' })]];
-        await expect(runAgentWithApiFallback('sk-key')(request)).rejects.toThrow('529 overloaded');
+    it('goes straight to the API when the run asks for it', async () => {
+        sessions = [[answered]];
+        const { runner } = fallback(true);
+        expect((await runner(request)).stats.billing).toBe('api');
         expect(envs).toHaveLength(1);
+    });
+
+    it('does not switch to the API for any other error', async () => {
+        sessions = [[result({ is_error: true, result: 'API Error: 529 overloaded' })]];
+        const { runner, exchanges } = fallback();
+        await expect(runner(request)).rejects.toThrow('529 overloaded');
+        expect(envs).toHaveLength(1);
+        expect(exchanges()).toBe(0);
     });
 });

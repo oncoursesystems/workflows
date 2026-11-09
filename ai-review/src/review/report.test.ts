@@ -99,8 +99,8 @@ describe('startsOver', () => {
     });
 });
 
-describe('API key spend', () => {
-    const agent = (billing: 'subscription' | 'api-key', costUsd: number) => ({
+describe('API spend', () => {
+    const agent = (billing: 'subscription' | 'api', costUsd: number) => ({
         role: 'r',
         model: 'm',
         billing,
@@ -111,16 +111,16 @@ describe('API key spend', () => {
         denied: [],
     });
 
-    it('shows how much of the review ran on the API key, and nothing when none did', () => {
+    it('shows how much of the review ran on the API, and nothing when none did', () => {
         const split = renderSummary({
             repo: 'o/r',
-            result: { ...result, agents: [agent('subscription', 0.5), agent('api-key', 1.25), agent('api-key', 0.25)] },
+            result: { ...result, agents: [agent('subscription', 0.5), agent('api', 1.25), agent('api', 0.25)] },
             state,
             inline: [],
             outsideDiff: [],
             scope: 'the whole pull request',
         });
-        expect(split).toContain('$1.50 ($1.50 on the API key after the subscription hit its limit), 1m 5s.');
-        expect(renderSummary({ repo: 'o/r', result, state, inline: [], outsideDiff: [], scope: 's' })).not.toContain('API key');
+        expect(split).toContain('$1.50 ($1.50 of it on the API), 1m 5s.');
+        expect(renderSummary({ repo: 'o/r', result, state, inline: [], outsideDiff: [], scope: 's' })).not.toContain('on the API');
     });
 });

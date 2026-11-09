@@ -9,6 +9,24 @@ import { postCheck } from './github.ts';
 import { reviewRecord } from './record.ts';
 import { renderAgentLog } from './report.ts';
 import { runReview, startsOver } from './run.ts';
+import { ANTHROPIC_AUDIENCE, exchangeIdentityToken, type Federation } from './wif.ts';
+
+function readFederation(): Federation | undefined {
+    const federation = {
+        ruleId: core.getInput('anthropic-federation-rule-id'),
+        organizationId: core.getInput('anthropic-organization-id'),
+        serviceAccountId: core.getInput('anthropic-service-account-id'),
+        workspaceId: core.getInput('anthropic-workspace-id'),
+    };
+    return Object.values(federation).every((value) => value !== '') ? federation : undefined;
+}
+
+async function apiToken(federation: Federation): Promise<string> {
+    const token = await exchangeIdentityToken(federation, await core.getIDToken(ANTHROPIC_AUDIENCE));
+    core.setSecret(token);
+    core.info('Switched to the Claude API through workload identity federation.');
+    return token;
+}
 
 async function run(): Promise<void> {
     const input = core.getInput('pull-request');
@@ -21,8 +39,13 @@ async function run(): Promise<void> {
     const checksOctokit = getOctokit(core.getInput('github-token', { required: true }));
     const botToken = core.getInput('bot-token');
     const octokit = botToken === '' ? checksOctokit : getOctokit(botToken);
-    const apiKey = core.getInput('anthropic-api-key');
     const fresh = startsOver(context.eventName, core.getInput('start-over'));
+    const federation = readFederation();
+    const apiOnly = core.getInput('api-only') === 'true';
+    if (apiOnly && federation === undefined) {
+        core.setFailed('api-only needs the anthropic-federation-rule-id, -organization-id, -service-account-id and -workspace-id inputs.');
+        return;
+    }
 
     try {
         const outcome = await runReview({
@@ -34,7 +57,7 @@ async function run(): Promise<void> {
             fresh,
             awaitRiskTier: context.eventName === 'pull_request',
             publish: true,
-            runAgent: apiKey === '' ? runAgent : runAgentWithApiFallback(apiKey),
+            runAgent: federation === undefined ? runAgent : runAgentWithApiFallback({ apiOnly, apiToken: () => apiToken(federation) }),
         });
         core.info(`#${number}: ${outcome.kind}`);
         if (outcome.kind === 'reviewed') {

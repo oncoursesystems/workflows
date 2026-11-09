@@ -12,7 +12,7 @@ export type AgentRequest<T> = {
     maxBudgetUsd: number;
 };
 
-export type Billing = 'subscription' | 'api-key';
+export type Billing = 'subscription' | 'api';
 
 export type AgentStats = {
     model: string;
@@ -43,27 +43,31 @@ export class UsageLimitError extends Error {
 const deniedCall = ({ tool_name, tool_input }: { tool_name: string; tool_input: Record<string, unknown> }): string =>
     typeof tool_input['command'] === 'string' ? `${tool_name}(${tool_input['command']})` : tool_name;
 
-type Auth = { billing: 'subscription' } | { billing: 'api-key'; apiKey: string };
+type Auth = { billing: 'subscription' } | { billing: 'api'; token: string };
 
 const sessionEnv = (auth: Auth) =>
     auth.billing === 'subscription'
-        ? { ...process.env, ANTHROPIC_API_KEY: undefined }
-        : { ...process.env, ANTHROPIC_API_KEY: auth.apiKey, CLAUDE_CODE_OAUTH_TOKEN: undefined };
+        ? { ...process.env, ANTHROPIC_API_KEY: undefined, ANTHROPIC_AUTH_TOKEN: undefined }
+        : { ...process.env, ANTHROPIC_AUTH_TOKEN: auth.token, ANTHROPIC_API_KEY: undefined, CLAUDE_CODE_OAUTH_TOKEN: undefined };
 
 export const runAgent: RunAgent = (request) => runSession(request, { billing: 'subscription' });
 
-export function runAgentWithApiFallback(apiKey: string): RunAgent {
-    let onApiKey = false;
-    return async (request) => {
-        if (!onApiKey) {
+export type ApiFallback = { apiToken: () => Promise<string>; apiOnly: boolean };
+
+export function runAgentWithApiFallback({ apiToken, apiOnly }: ApiFallback): RunAgent {
+    let onApi = apiOnly;
+    let token: Promise<string> | undefined;
+    return async <T>(request: AgentRequest<T>): Promise<AgentRun<T>> => {
+        if (!onApi) {
             try {
                 return await runSession(request, { billing: 'subscription' });
             } catch (error) {
                 if (!(error instanceof UsageLimitError)) throw error;
-                onApiKey = true;
+                onApi = true;
             }
         }
-        return runSession(request, { billing: 'api-key', apiKey });
+        token ??= apiToken();
+        return runSession(request, { billing: 'api', token: await token });
     };
 }
 
