@@ -18,7 +18,7 @@ The action reviews a pull request with Claude and posts the findings that surviv
 3. Candidates on the same file within 5 lines of each other merge, keeping the Important one. When 2 or more candidates remain, one `claude-sonnet-5-5` agent groups the ones that a single edit in one place would fix, and only the first of each group goes on. The same mistake in two methods stays as two candidates.
 4. Three `claude-haiku-5-5` reviewers check each candidate in fresh contexts. Each gets the claim and the whole diff, with the candidate's file first, but not the bug finder's reasoning. A candidate survives when 2 of 3 say it is real. The reviewers also judge its severity against `REVIEW.md`: it is Important when at least half of the reviewers who confirmed it say so, and Minor otherwise.
 5. The action, not Claude, posts the results:
-    - When a run starts, the summary comment says the review is running. The action edits that same comment with the results, or with the error when the review fails.
+    - When a run starts, the summary comment says the review is running. The action edits that same comment with the results, or with the error when the review fails. When the Claude subscription hits a usage limit and no federation rule is given, the summary and the `ai-review` check say so with the time the limit resets, and the job passes with a warning instead of failing. The next push, or the backfill command run again, picks the pull request up.
     - Important findings on a line in the diff become review comments. A finding is never posted twice.
     - Important findings outside the diff, up to 3 Minor findings, and up to 2 pre-existing findings go in the summary comment, each with a link to its line. The heading over the Minor findings rotates per review, from `MINOR_HEADINGS` in `report.ts`, and stays the same for the same commit.
     - The `ai-review` check gets the same summary.
@@ -40,6 +40,18 @@ The summary comment keeps the reviewed commit, the round and the tier. A later p
 ### `claude-code-oauth-token`
 
 **Required** Claude Code OAuth token the agents run on.
+
+### `anthropic-federation-rule-id`, `anthropic-organization-id`, `anthropic-service-account-id` and `anthropic-workspace-id`
+
+**Optional** A [workload identity federation](https://platform.claude.com/docs/en/manage-claude/wif-providers/github-actions) rule to fall back on, with no API key stored anywhere. When the subscription behind `claude-code-oauth-token` hits a usage limit, the action asks GitHub for an ID token with the audience `https://api.anthropic.com`, exchanges it once for a short-lived Anthropic access token, and runs the agent that hit the limit again on the API. Every later agent in that run uses the API too. The next run tries the subscription first again.
+
+The API is billed per token to the workspace, so give the workspace a spend limit. The job needs the `id-token: write` permission. The agent log shows each agent's billing, and the summary says how much ran on the API. A denied exchange fails the review, and the Console's authentication history on the Workload identity page shows why.
+
+In OnCourse repositories, the four values are the org variables `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `ANTHROPIC_SERVICE_ACCOUNT_ID` and `ANTHROPIC_WORKSPACE_ID`. The rule accepts only `ai-review.yml` workflows in the `oncoursesystems` org, on `pull_request` and `workflow_dispatch` runs.
+
+### `api-only`
+
+**Optional** `true` skips the subscription and runs the whole review on the API through the federation rule. Use it to test the federation setup without waiting for a usage limit. Default `false`.
 
 ### `pull-request`
 

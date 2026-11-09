@@ -16,6 +16,25 @@ inputs:
   claude-code-oauth-token:
     description: Claude Code OAuth token the agents run on.
     required: true
+  anthropic-federation-rule-id:
+    description: >
+      Workload identity federation rule (fdrl_...) to fall back on. When the subscription hits a usage limit, the
+      rest of the run uses the Claude API through this rule, billed per token to its workspace. The job needs the
+      id-token write permission. Without the four federation inputs, a usage limit ends the review with a warning.
+    required: false
+  anthropic-organization-id:
+    description: Anthropic organization ID (a UUID) that owns the federation rule.
+    required: false
+  anthropic-service-account-id:
+    description: Service account (svac_...) the federation rule targets.
+    required: false
+  anthropic-workspace-id:
+    description: Workspace (wrkspc_...) that the API calls are billed to.
+    required: false
+  api-only:
+    description: Skip the subscription and run the whole review on the Claude API. Use it to test the federation setup.
+    required: false
+    default: 'false'
   pull-request:
     description: Number of the pull request to review. Used only when the event is not a pull_request event.
     required: false
@@ -55,6 +74,11 @@ runs:
         INPUT_PULL-REQUEST: ${{ inputs.pull-request }}
         INPUT_START-OVER: ${{ inputs.start-over }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        INPUT_ANTHROPIC-FEDERATION-RULE-ID: ${{ inputs.anthropic-federation-rule-id }}
+        INPUT_ANTHROPIC-ORGANIZATION-ID: ${{ inputs.anthropic-organization-id }}
+        INPUT_ANTHROPIC-SERVICE-ACCOUNT-ID: ${{ inputs.anthropic-service-account-id }}
+        INPUT_ANTHROPIC-WORKSPACE-ID: ${{ inputs.anthropic-workspace-id }}
+        INPUT_API-ONLY: ${{ inputs.api-only }}
       run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/review/action.ts"
 
     - name: Keep the review record
