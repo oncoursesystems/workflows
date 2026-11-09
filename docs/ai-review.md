@@ -33,9 +33,9 @@ The summary comment keeps the reviewed commit, the round and the tier. A later p
 
 **Required** Workflow token. It posts the `ai-review` check, and the comments too when no bot app is given. The job needs the `contents: read`, `pull-requests: write`, `issues: write`, and `checks: write` permissions.
 
-### `bot-app-id` and `bot-app-private-key`
+### `bot-client-id` and `bot-app-private-key`
 
-**Optional** A GitHub App that posts the summary and the review comments, such as `oc-bot-ross`. Without them, the workflow token posts them as `github-actions[bot]`. The workflow token always posts the check.
+**Optional** The client ID and private key of a GitHub App that posts the summary and the review comments, such as `oc-bot-ross`. In OnCourse repositories the client ID is the org variable `GH_APP_CLIENT_ID`. Without them, the workflow token posts them as `github-actions[bot]`. The workflow token always posts the check.
 
 ### `claude-code-oauth-token`
 

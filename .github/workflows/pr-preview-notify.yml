@@ -34,8 +34,6 @@ on:
         type: string
         default: linux
     secrets:
-      GH_APP_ID:
-        required: true
       GH_APP_PRIVATE_KEY:
         required: true
       ARGOCD_AUTH_TOKEN:
@@ -51,7 +49,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.GH_APP_ID }}
+          client-id: ${{ vars.GH_APP_CLIENT_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
       - name: Post "Deploying" comment
