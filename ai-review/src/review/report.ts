@@ -37,6 +37,13 @@ const seconds = (ms: number): number => Math.round(ms / 1000);
 
 const minutes = (ms: number): string => `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 
+function apiKeyShare(agents: readonly AgentReport[]): string {
+    const onApiKey = agents.filter((agent) => agent.billing === 'api-key');
+    return onApiKey.length === 0
+        ? ''
+        : ` ($${onApiKey.reduce((sum, agent) => sum + agent.costUsd, 0).toFixed(2)} on the API key after the subscription hit its limit)`;
+}
+
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 const roundLine = (state: ReviewState, scope: string, verb: string): string =>
@@ -104,7 +111,7 @@ export function renderSummary({ repo, result, state, inline, outsideDiff, scope,
         ...section('Pre-existing', repo, sha, of('pre-existing')),
         '',
         `<sub>${plural(result.candidates, 'candidate')} checked, ${of('dropped').length} dropped by the reviewers. ` +
-            `$${result.costUsd.toFixed(2)}, ${minutes(result.durationMs)}.</sub>`,
+            `$${result.costUsd.toFixed(2)}${apiKeyShare(result.agents)}, ${minutes(result.durationMs)}.</sub>`,
         renderState(state),
     ].join('\n');
 }
@@ -152,8 +159,8 @@ export function renderAgentLog(agents: readonly AgentReport[]): string {
             .map(([name, count]) => `${name} ${count}`)
             .join(', ');
         const denied = agent.denied.length === 0 ? '' : ` | denied: ${agent.denied.join(', ')}`;
-        return `${agent.role} | ${agent.model} | ${plural(agent.turns, 'turn')} | ${tools || 'no tool calls'} | ` +
+        return `${agent.role} | ${agent.model} | ${agent.billing} | ${plural(agent.turns, 'turn')} | ${tools || 'no tool calls'} | ` +
             `$${agent.costUsd.toFixed(2)} | ${seconds(agent.durationMs)}s${denied}`;
     });
-    return ['role | model | turns | tool calls | cost | time', ...rows].join('\n');
+    return ['role | model | billing | turns | tool calls | cost | time', ...rows].join('\n');
 }

@@ -18,7 +18,7 @@ The action reviews a pull request with Claude and posts the findings that surviv
 3. Candidates on the same file within 5 lines of each other merge, keeping the Important one. When 2 or more candidates remain, one `claude-sonnet-5-5` agent groups the ones that a single edit in one place would fix, and only the first of each group goes on. The same mistake in two methods stays as two candidates.
 4. Three `claude-haiku-5-5` reviewers check each candidate in fresh contexts. Each gets the claim and the whole diff, with the candidate's file first, but not the bug finder's reasoning. A candidate survives when 2 of 3 say it is real. The reviewers also judge its severity against `REVIEW.md`: it is Important when at least half of the reviewers who confirmed it say so, and Minor otherwise.
 5. The action, not Claude, posts the results:
-    - When a run starts, the summary comment says the review is running. The action edits that same comment with the results, or with the error when the review fails. When the Claude account hits a usage limit, the summary and the `ai-review` check say so with the time the limit resets, and the job passes with a warning instead of failing. The next push, or the backfill command run again, picks the pull request up.
+    - When a run starts, the summary comment says the review is running. The action edits that same comment with the results, or with the error when the review fails. When the Claude subscription hits a usage limit and no `anthropic-api-key` is given, the summary and the `ai-review` check say so with the time the limit resets, and the job passes with a warning instead of failing. The next push, or the backfill command run again, picks the pull request up.
     - Important findings on a line in the diff become review comments. A finding is never posted twice.
     - Important findings outside the diff, up to 3 Minor findings, and up to 2 pre-existing findings go in the summary comment, each with a link to its line. The heading over the Minor findings rotates per review, from `MINOR_HEADINGS` in `report.ts`, and stays the same for the same commit.
     - The `ai-review` check gets the same summary.
@@ -40,6 +40,10 @@ The summary comment keeps the reviewed commit, the round and the tier. A later p
 ### `claude-code-oauth-token`
 
 **Required** Claude Code OAuth token the agents run on.
+
+### `anthropic-api-key`
+
+**Optional** Anthropic API key to fall back on. When the subscription behind `claude-code-oauth-token` hits a usage limit, the agent that hit it runs again on this key, and so does every later agent in that run. The next run tries the subscription first again. The key is billed per token, so set a spend limit on its Console workspace. The agent log shows each agent's billing, and the summary says how much ran on the key.
 
 ### `pull-request`
 

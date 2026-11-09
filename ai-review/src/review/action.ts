@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
 import { fetchPullRequest, parsePullRequestNumber } from '../risk/github.ts';
-import { runAgent, UsageLimitError } from './agent.ts';
+import { runAgent, runAgentWithApiFallback, UsageLimitError } from './agent.ts';
 import { postCheck } from './github.ts';
 import { reviewRecord } from './record.ts';
 import { renderAgentLog } from './report.ts';
@@ -21,6 +21,7 @@ async function run(): Promise<void> {
     const checksOctokit = getOctokit(core.getInput('github-token', { required: true }));
     const botToken = core.getInput('bot-token');
     const octokit = botToken === '' ? checksOctokit : getOctokit(botToken);
+    const apiKey = core.getInput('anthropic-api-key');
     const fresh = startsOver(context.eventName, core.getInput('start-over'));
 
     try {
@@ -33,7 +34,7 @@ async function run(): Promise<void> {
             fresh,
             awaitRiskTier: context.eventName === 'pull_request',
             publish: true,
-            runAgent,
+            runAgent: apiKey === '' ? runAgent : runAgentWithApiFallback(apiKey),
         });
         core.info(`#${number}: ${outcome.kind}`);
         if (outcome.kind === 'reviewed') {

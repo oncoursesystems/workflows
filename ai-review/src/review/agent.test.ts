@@ -2,15 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 let messages: unknown[] = [];
+let sessions: unknown[][] = [];
+let envs: Array<Record<string, string | undefined>> = [];
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
-    query: () =>
-        (async function* () {
-            yield* messages;
-        })(),
+    query: ({ options }: { options: { env: Record<string, string | undefined> } }) => {
+        envs.push(options.env);
+        const session = sessions.shift() ?? messages;
+        return (async function* () {
+            yield* session;
+        })();
+    },
 }));
 
-const { runAgent, UsageLimitError } = await import('./agent.ts');
+const { runAgent, runAgentWithApiFallback, UsageLimitError } = await import('./agent.ts');
 
 const request = {
     model: 'claude-sonnet-5-5',
@@ -37,6 +42,8 @@ const result = (fields: Record<string, unknown>) => ({
 describe('runAgent', () => {
     beforeEach(() => {
         messages = [];
+        sessions = [];
+        envs = [];
     });
 
     it('returns the structured output', async () => {
@@ -65,5 +72,47 @@ describe('runAgent', () => {
             result({ structured_output: { ok: true } }),
         ];
         await expect(runAgent(request)).resolves.toMatchObject({ output: { ok: true } });
+    });
+});
+
+describe('runAgentWithApiFallback', () => {
+    const limited = [
+        { type: 'rate_limit_event', rate_limit_info: { status: 'rejected', rateLimitType: 'five_hour' } },
+        result({ is_error: true, result: "You've hit your limit" }),
+    ];
+    const answered = result({ structured_output: { ok: true } });
+
+    beforeEach(() => {
+        messages = [];
+        sessions = [];
+        envs = [];
+        process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'oauth';
+        process.env['ANTHROPIC_API_KEY'] = 'stray-runner-key';
+    });
+
+    it('runs on the subscription while it has room', async () => {
+        sessions = [[answered]];
+        const run = await runAgentWithApiFallback('sk-key')(request);
+        expect(run.stats.billing).toBe('subscription');
+        expect(envs[0]?.['CLAUDE_CODE_OAUTH_TOKEN']).toBe('oauth');
+        expect(envs[0]?.['ANTHROPIC_API_KEY']).toBeUndefined();
+    });
+
+    it('reruns the agent on the API key without the OAuth token after a usage limit, and keeps the rest of the run there', async () => {
+        sessions = [limited, [answered], [answered]];
+        const runAgentForReview = runAgentWithApiFallback('sk-key');
+        const first = await runAgentForReview(request);
+        const second = await runAgentForReview(request);
+        expect([first.stats.billing, second.stats.billing]).toEqual(['api-key', 'api-key']);
+        expect(envs).toHaveLength(3);
+        expect(envs[1]?.['ANTHROPIC_API_KEY']).toBe('sk-key');
+        expect(envs[1]?.['CLAUDE_CODE_OAUTH_TOKEN']).toBeUndefined();
+        expect(envs[2]?.['ANTHROPIC_API_KEY']).toBe('sk-key');
+    });
+
+    it('does not switch to the API key for any other error', async () => {
+        sessions = [[result({ is_error: true, result: 'API Error: 529 overloaded' })]];
+        await expect(runAgentWithApiFallback('sk-key')(request)).rejects.toThrow('529 overloaded');
+        expect(envs).toHaveLength(1);
     });
 });

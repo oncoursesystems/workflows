@@ -12,8 +12,11 @@ export type AgentRequest<T> = {
     maxBudgetUsd: number;
 };
 
+export type Billing = 'subscription' | 'api-key';
+
 export type AgentStats = {
     model: string;
+    billing: Billing;
     costUsd: number;
     turns: number;
     durationMs: number;
@@ -37,15 +40,40 @@ export class UsageLimitError extends Error {
     override name = 'UsageLimitError';
 }
 
-const deniedCall =({ tool_name, tool_input }: { tool_name: string; tool_input: Record<string, unknown> }): string =>
+const deniedCall = ({ tool_name, tool_input }: { tool_name: string; tool_input: Record<string, unknown> }): string =>
     typeof tool_input['command'] === 'string' ? `${tool_name}(${tool_input['command']})` : tool_name;
 
-export const runAgent: RunAgent = async <T>(request: AgentRequest<T>): Promise<AgentRun<T>> => {
+type Auth = { billing: 'subscription' } | { billing: 'api-key'; apiKey: string };
+
+const sessionEnv = (auth: Auth) =>
+    auth.billing === 'subscription'
+        ? { ...process.env, ANTHROPIC_API_KEY: undefined }
+        : { ...process.env, ANTHROPIC_API_KEY: auth.apiKey, CLAUDE_CODE_OAUTH_TOKEN: undefined };
+
+export const runAgent: RunAgent = (request) => runSession(request, { billing: 'subscription' });
+
+export function runAgentWithApiFallback(apiKey: string): RunAgent {
+    let onApiKey = false;
+    return async (request) => {
+        if (!onApiKey) {
+            try {
+                return await runSession(request, { billing: 'subscription' });
+            } catch (error) {
+                if (!(error instanceof UsageLimitError)) throw error;
+                onApiKey = true;
+            }
+        }
+        return runSession(request, { billing: 'api-key', apiKey });
+    };
+}
+
+async function runSession<T>(request: AgentRequest<T>, auth: Auth): Promise<AgentRun<T>> {
     const started = Date.now();
     const tools: Record<string, number> = {};
     const session = query({
         prompt: request.prompt,
         options: {
+            env: sessionEnv(auth),
             model: request.model,
             systemPrompt: request.systemPrompt,
             cwd: request.cwd,
@@ -82,6 +110,7 @@ export const runAgent: RunAgent = async <T>(request: AgentRequest<T>): Promise<A
             output: parsed.data,
             stats: {
                 model: request.model,
+                billing: auth.billing,
                 costUsd: message.total_cost_usd,
                 turns: message.num_turns,
                 durationMs: Date.now() - started,
@@ -91,4 +120,4 @@ export const runAgent: RunAgent = async <T>(request: AgentRequest<T>): Promise<A
         };
     }
     throw new Error(`${request.model} ended without a result`);
-};
+}

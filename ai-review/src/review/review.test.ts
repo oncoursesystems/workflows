@@ -45,11 +45,11 @@ function fakeAgent(candidates: Candidate[], votesByClaim: Record<string, boolean
         if (schema === FinderOutput) {
             const output: FinderOutput = { candidates };
             const tools = options.finderTools ?? { Read: 2 };
-            return { output: output as T, stats: { model: request.model, costUsd: 1, turns: 3, durationMs: 5, tools, denied: [] } };
+            return { output: output as T, stats: { model: request.model, costUsd: 1, turns: 3, durationMs: 5, tools, denied: [], billing: 'subscription' } };
         }
         if (schema === DuplicateGroups) {
             const output: DuplicateGroups = { groups: options.groups ?? [] };
-            return { output: output as T, stats: { model: request.model, costUsd: 0.05, turns: 1, durationMs: 2, tools: {}, denied: [] } };
+            return { output: output as T, stats: { model: request.model, costUsd: 0.05, turns: 1, durationMs: 2, tools: {}, denied: [], billing: 'subscription' } };
         }
         const claim = candidates.find((c) => request.prompt.includes(c.claim))?.claim ?? '';
         const index = voteIndex[claim] ?? 0;
@@ -60,7 +60,7 @@ function fakeAgent(candidates: Candidate[], votesByClaim: Record<string, boolean
             severity: 'important',
             reason: 'checked',
         };
-        return { output: verdict as T, stats: { model: request.model, costUsd: 0.1, turns: 2, durationMs: 3, tools: {}, denied: [] } };
+        return { output: verdict as T, stats: { model: request.model, costUsd: 0.1, turns: 2, durationMs: 3, tools: {}, denied: [], billing: 'subscription' } };
     };
     return { runAgent, requests, peak: () => peak };
 }

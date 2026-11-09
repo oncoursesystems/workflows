@@ -16,6 +16,11 @@ inputs:
   claude-code-oauth-token:
     description: Claude Code OAuth token the agents run on.
     required: true
+  anthropic-api-key:
+    description: >
+      Anthropic API key to fall back on. When the Claude Code subscription hits a usage limit, the rest of the run
+      uses this key, billed per token. Without it, a usage limit ends the review with a warning.
+    required: false
   pull-request:
     description: Number of the pull request to review. Used only when the event is not a pull_request event.
     required: false
@@ -55,6 +60,7 @@ runs:
         INPUT_PULL-REQUEST: ${{ inputs.pull-request }}
         INPUT_START-OVER: ${{ inputs.start-over }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        INPUT_ANTHROPIC-API-KEY: ${{ inputs.anthropic-api-key }}
       run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/review/action.ts"
 
     - name: Keep the review record
