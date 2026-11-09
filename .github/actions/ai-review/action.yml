@@ -7,8 +7,8 @@ inputs:
   github-token:
     description: Workflow token. It posts the ai-review check, and the comments too when no bot app is given.
     required: true
-  bot-app-id:
-    description: ID of the GitHub App that posts the summary and the review comments.
+  bot-client-id:
+    description: Client ID of the GitHub App that posts the summary and the review comments.
     required: false
   bot-app-private-key:
     description: Private key of that GitHub App.
@@ -50,10 +50,10 @@ runs:
   steps:
     - name: Create the bot token
       id: bot
-      if: inputs.bot-app-id != '' && inputs.bot-app-private-key != ''
+      if: inputs.bot-client-id != '' && inputs.bot-app-private-key != ''
       uses: actions/create-github-app-token@v3
       with:
-        app-id: ${{ inputs.bot-app-id }}
+        client-id: ${{ inputs.bot-client-id }}
         private-key: ${{ inputs.bot-app-private-key }}
 
     - uses: actions/setup-node@v6
