@@ -1,6 +1,6 @@
-# jev-labeler
+# ai-labeler
 
-The `jev-labeler` action is located at [.github/actions/jev-labeler/action.yml](/oncoursesystems/workflows/tree/main/.github/actions/jev-labeler/action.yml). Its source is the `ai-review` package, under [ai-review/src/labels](/oncoursesystems/workflows/tree/main/ai-review/src/labels).
+The `ai-labeler` action is located at [.github/actions/ai-labeler/action.yml](/oncoursesystems/workflows/tree/main/.github/actions/ai-labeler/action.yml). Its source is the `ai-review` package, under [ai-review/src/labels](/oncoursesystems/workflows/tree/main/ai-review/src/labels).
 
 The action labels a pull request with labels that each repository defines in a YAML file. For each label, the config holds the criteria for the label. The action asks Jev, TypeSafe's System One model, one yes or no question about the pull request for each label, and then adds or removes the label. A reviewer can filter and find pull requests by what they change, such as the AI features of an application.
 
@@ -34,7 +34,7 @@ The action labels a pull request with labels that each repository defines in a Y
 
 **Optional** Path of the label config, read from the pull request's base branch.
 
-**Default** `.github/jev-labeler.yml`
+**Default** `.github/ai-labeler.yml`
 
 ### `jev-model`
 
@@ -51,7 +51,7 @@ The labels from the config that are on the pull request after the run, comma-sep
 ## Usage
 
 ```yaml
-name: jev-labeler
+name: ai-labeler
 
 # This workflow never checks out the pull request. pull_request_target runs with write
 # permissions, so the job must not run code from the pull request. The action reads the
@@ -61,7 +61,7 @@ name: jev-labeler
 # workflow existed, run the workflow once for each open pull request:
 #
 #   gh pr list --state open --limit 500 --json number -q '.[].number' |
-#     while read n; do gh workflow run jev-labeler.yml -f pull-request=$n; done
+#     while read n; do gh workflow run ai-labeler.yml -f pull-request=$n; done
 #
 # Each run reads the config from the pull request's base branch and adds or removes
 # only the labels the config lists.
@@ -86,10 +86,10 @@ permissions:
   pull-requests: write
 
 jobs:
-  jev-labeler:
+  ai-labeler:
     runs-on: ubuntu-latest
     steps:
-      - uses: oncoursesystems/workflows/.github/actions/jev-labeler@main
+      - uses: oncoursesystems/workflows/.github/actions/ai-labeler@main
         with:
           github-token: ${{ github.token }}
           typesafe-api-key: ${{ secrets.TYPESAFE_AI_KEY }}
@@ -100,7 +100,7 @@ The workflow uses `pull_request_target` so that pull requests from forks get a t
 
 ## Config
 
-Put `.github/jev-labeler.yml` on the default branch of the repository. Every key other than `labels` and `instructions` is optional. An unknown key makes the file invalid.
+Put `.github/ai-labeler.yml` on the default branch of the repository. Every key other than `labels` and `instructions` is optional. An unknown key makes the file invalid.
 
 ```yaml
 labels:
@@ -167,4 +167,4 @@ Pass a pull request URL instead of `owner/repo#number` if you prefer. Without `G
 
 ## Development
 
-The bundle in `.github/actions/jev-labeler/dist` is committed, because callers run it directly. After a change under `ai-review`, run `npm run build` and commit the new bundles. The `ai-review-ci` workflow fails when a committed bundle differs from a fresh build.
+The bundle in `.github/actions/ai-labeler/dist` is committed, because callers run it directly. After a change under `ai-review`, run `npm run build` and commit the new bundles. The `ai-review-ci` workflow fails when a committed bundle differs from a fresh build.

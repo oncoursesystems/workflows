@@ -2,7 +2,7 @@ import { isMap, isScalar, parseDocument } from 'yaml';
 import { z } from 'zod';
 import { describeIssues } from '../jev/response.ts';
 
-export const DEFAULT_CONFIG_PATH = '.github/jev-labeler.yml';
+export const DEFAULT_CONFIG_PATH = '.github/ai-labeler.yml';
 export const DEFAULT_ADD_AT = 0.7;
 export const DEFAULT_REMOVE_AT = 0.3;
 

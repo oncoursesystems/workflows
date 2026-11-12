@@ -152,4 +152,4 @@ Without `GH_TOKEN`, the command uses `gh auth token`. Pass `--no-jev` to classif
 
 ## Development
 
-The bundles in `.github/actions/risk-tier/dist` and `.github/actions/jev-labeler/dist` are committed, because callers run them directly. After a change under `ai-review`, run `npm run build` and commit the new bundles. The `ai-review-ci` workflow fails when a committed bundle differs from a fresh build.
+The bundles in `.github/actions/risk-tier/dist` and `.github/actions/ai-labeler/dist` are committed, because callers run them directly. After a change under `ai-review`, run `npm run build` and commit the new bundles. The `ai-review-ci` workflow fails when a committed bundle differs from a fresh build.

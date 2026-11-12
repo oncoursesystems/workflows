@@ -1,4 +1,4 @@
-name: jev-labeler
+name: ai-labeler
 
 # pull_request_target runs with write permissions, so the job must not run code from the pull request.
 
@@ -22,10 +22,10 @@ permissions:
   pull-requests: write
 
 jobs:
-  jev-labeler:
+  ai-labeler:
     runs-on: ubuntu-latest
     steps:
-      - uses: oncoursesystems/workflows/.github/actions/jev-labeler@main
+      - uses: oncoursesystems/workflows/.github/actions/ai-labeler@main
         with:
           github-token: ${{ github.token }}
           typesafe-api-key: ${{ secrets.TYPESAFE_AI_KEY }}

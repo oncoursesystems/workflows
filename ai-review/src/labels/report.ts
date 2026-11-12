@@ -7,7 +7,7 @@ export function renderSummary(run: Extract<LabelRun, { status: 'answered' }>): s
             `| ${cell(rule.name)} | ${percent(probability)} | ${percent(rule.addAt)} | ${percent(rule.removeAt)} | ${action} |`,
     );
     return [
-        '## Jev labels',
+        '## AI labels',
         '',
         `Model \`${run.model}\`, ${run.inputTokens.toLocaleString('en-US')} input tokens. ${DIFF_NOTE[run.diff]}`,
         '',

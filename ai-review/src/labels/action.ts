@@ -10,7 +10,7 @@ async function run(): Promise<void> {
     const input = core.getInput('pull-request');
     const eventNumber = context.payload.pull_request?.number;
     if (eventNumber === undefined && input === '') {
-        core.setFailed(`jev-labeler needs a pull_request event or the pull-request input, and got ${context.eventName} without it.`);
+        core.setFailed(`ai-labeler needs a pull_request event or the pull-request input, and got ${context.eventName} without it.`);
         return;
     }
     const number = eventNumber ?? parsePullRequestNumber(input);
@@ -23,7 +23,7 @@ async function run(): Promise<void> {
     const lookup = await fetchConfig(octokit, context.repo, pr.baseRef, path);
     switch (lookup.kind) {
         case 'missing':
-            core.info(`\`${path}\` does not exist on \`${lookup.ref}\`, so #${number} gets no Jev labels.`);
+            core.info(`\`${path}\` does not exist on \`${lookup.ref}\`, so #${number} gets no AI labels.`);
             return;
         case 'invalid':
             core.setFailed(`\`${path}\` on \`${lookup.ref}\` is invalid: ${lookup.error}`);

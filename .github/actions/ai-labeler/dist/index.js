@@ -51733,7 +51733,7 @@ var usage = external_exports.object({ input_tokens: external_exports.number().in
 var describeIssues = (error63, root = "file") => error63.issues.map((issue3) => `${issue3.path.length > 0 ? issue3.path.join(".") : root}: ${issue3.message}`).join("; ");
 
 // src/labels/config.ts
-var DEFAULT_CONFIG_PATH = ".github/jev-labeler.yml";
+var DEFAULT_CONFIG_PATH = ".github/ai-labeler.yml";
 var DEFAULT_ADD_AT = 0.7;
 var DEFAULT_REMOVE_AT = 0.3;
 var threshold = external_exports.number().min(0).max(1);
@@ -51801,7 +51801,7 @@ function renderSummary(run2) {
     ({ rule, probability: probability2, action }) => `| ${cell(rule.name)} | ${percent(probability2)} | ${percent(rule.addAt)} | ${percent(rule.removeAt)} | ${action} |`
   );
   return [
-    "## Jev labels",
+    "## AI labels",
     "",
     `Model \`${run2.model}\`, ${run2.inputTokens.toLocaleString("en-US")} input tokens. ${DIFF_NOTE[run2.diff]}`,
     "",
@@ -52032,7 +52032,7 @@ async function run() {
   const input2 = getInput("pull-request");
   const eventNumber = context2.payload.pull_request?.number;
   if (eventNumber === void 0 && input2 === "") {
-    setFailed(`jev-labeler needs a pull_request event or the pull-request input, and got ${context2.eventName} without it.`);
+    setFailed(`ai-labeler needs a pull_request event or the pull-request input, and got ${context2.eventName} without it.`);
     return;
   }
   const number4 = eventNumber ?? parsePullRequestNumber(input2);
@@ -52044,7 +52044,7 @@ async function run() {
   const lookup = await fetchConfig(octokit, context2.repo, pr.baseRef, path);
   switch (lookup.kind) {
     case "missing":
-      info(`\`${path}\` does not exist on \`${lookup.ref}\`, so #${number4} gets no Jev labels.`);
+      info(`\`${path}\` does not exist on \`${lookup.ref}\`, so #${number4} gets no AI labels.`);
       return;
     case "invalid":
       setFailed(`\`${path}\` on \`${lookup.ref}\` is invalid: ${lookup.error}`);

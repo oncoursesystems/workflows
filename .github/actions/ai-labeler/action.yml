@@ -1,4 +1,4 @@
-name: Jev labeler
+name: AI labeler
 description: >
   Label a pull request with the labels a repository defines in a YAML file on
   the base branch. For each label, asks Jev one yes or no question about the
@@ -18,7 +18,7 @@ inputs:
   config-path:
     description: Path of the label config, read from the pull request's base branch.
     required: false
-    default: .github/jev-labeler.yml
+    default: .github/ai-labeler.yml
   jev-model:
     description: Jev model ID. Pin a version, because the thresholds are calibrated per version.
     required: false

@@ -15,11 +15,11 @@ The web workflow is designed to build and publish Docker images to a registry an
 
 ### Actions
 
+- [ai-labeler](.github/actions/ai-labeler/action.yml) ([docs](docs/ai-labeler.md)) - Labels a pull request with the labels a repository defines, each added or removed by Jev's answer to one yes or no question
 - [ai-review](.github/actions/ai-review/action.yml) ([docs](docs/ai-review.md)) - Reviews a pull request with Claude bug finders sized by its risk tier and posts the findings that three reviewers confirm
 - [create-release](.github/workflows/create-release.yml) ([docs](docs/create-release.md)) - Creates a GitHub release and publishes a Docker image with the current timestamp as the tag
 - [docker-build](.github/workflows/docker-build.yml) ([docs](docs/docker-build.md)) - Builds a Docker image and pushes it to a registry
 - [e2e-testing](.github/workflows/e2e-testing.yml) ([docs](docs/e2e-testing.md)) - Agentic E2E UI testing using Claude AI and agent-browser
-- [jev-labeler](.github/actions/jev-labeler/action.yml) ([docs](docs/jev-labeler.md)) - Labels a pull request with the labels a repository defines, each added or removed by Jev's answer to one yes or no question
 - [pr-preview](.github/workflows/pr-preview.yml) ([docs](docs/pr-preview.md)) - Deploys a PR preview build to a kubernetes cluster
 - [risk-tier](.github/actions/risk-tier/action.yml) ([docs](docs/risk-tier.md)) - Classifies a pull request as low, medium, or high risk and publishes the tier as a label and a check
 - [web-cd](.github/workflows/web-cd.yml) ([docs](docs/web-cd.md)) - Manages publishing a web application release
