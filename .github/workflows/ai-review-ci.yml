@@ -5,12 +5,14 @@ on:
     paths:
       - "ai-review/**"
       - ".github/actions/risk-tier/**"
+      - ".github/actions/jev-labeler/**"
       - ".github/workflows/ai-review-ci.yml"
   push:
     branches: [main]
     paths:
       - "ai-review/**"
       - ".github/actions/risk-tier/**"
+      - ".github/actions/jev-labeler/**"
       - ".github/workflows/ai-review-ci.yml"
 
 permissions:
@@ -47,5 +49,5 @@ jobs:
 
       - name: Check the committed bundle is current
         run: |
-          git add --intent-to-add -- ../.github/actions/risk-tier/dist
-          git diff --exit-code -- ../.github/actions/risk-tier/dist
+          git add --intent-to-add -- ../.github/actions/risk-tier/dist ../.github/actions/jev-labeler/dist
+          git diff --exit-code -- ../.github/actions/risk-tier/dist ../.github/actions/jev-labeler/dist
