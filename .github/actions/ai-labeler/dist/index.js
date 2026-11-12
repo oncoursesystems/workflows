@@ -31928,6 +31928,7 @@ async function fetchPullRequest(octokit, repo, number4) {
     body: pr.body ?? "",
     author: pr.user.login,
     baseRef: pr.base.ref,
+    defaultBranch: pr.base.repo.default_branch,
     headSha: pr.head.sha,
     draft: pr.draft ?? false,
     files: files.map((file2) => ({
@@ -31940,10 +31941,10 @@ async function fetchPullRequest(octokit, repo, number4) {
     }))
   };
 }
-async function fetchBaseFile(octokit, repo, baseRef, path) {
+async function fetchFile(octokit, repo, ref, path) {
   let data;
   try {
-    ({ data } = await octokit.rest.repos.getContent({ ...repo, path, ref: baseRef }));
+    ({ data } = await octokit.rest.repos.getContent({ ...repo, path, ref }));
   } catch (error63) {
     if (isNotFound(error63)) return { kind: "missing" };
     throw error63;
@@ -51991,15 +51992,15 @@ var managedLabelsAfter = (current, rules, decisions) => {
 };
 
 // src/labels/run.ts
-async function fetchConfig(octokit, repo, baseRef, path) {
-  const file2 = await fetchBaseFile(octokit, repo, baseRef, path);
+async function fetchConfig(octokit, repo, ref, path) {
+  const file2 = await fetchFile(octokit, repo, ref, path);
   switch (file2.kind) {
     case "missing":
-      return { kind: "missing", ref: baseRef };
+      return { kind: "missing", ref };
     case "unreadable":
-      return { kind: "invalid", ref: baseRef, error: file2.error };
+      return { kind: "invalid", ref, error: file2.error };
     case "found":
-      return lookupConfig(file2.text, baseRef);
+      return lookupConfig(file2.text, ref);
   }
 }
 async function labelPullRequest(octokit, repo, pr, rules, jev, dryRun) {
@@ -52041,7 +52042,7 @@ async function run() {
   setSecret(apiKey);
   const pr = await fetchPullRequest(octokit, context2.repo, number4);
   const path = getInput("config-path") || DEFAULT_CONFIG_PATH;
-  const lookup = await fetchConfig(octokit, context2.repo, pr.baseRef, path);
+  const lookup = await fetchConfig(octokit, context2.repo, pr.defaultBranch, path);
   switch (lookup.kind) {
     case "missing":
       info(`\`${path}\` does not exist on \`${lookup.ref}\`, so #${number4} gets no AI labels.`);

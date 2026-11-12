@@ -47,6 +47,7 @@ export async function fetchPullRequest(octokit: Octokit, repo: RepoRef, number: 
         body: pr.body ?? '',
         author: pr.user.login,
         baseRef: pr.base.ref,
+        defaultBranch: pr.base.repo.default_branch,
         headSha: pr.head.sha,
         draft: pr.draft ?? false,
         files: files.map((file): ChangedFile => ({
@@ -60,12 +61,12 @@ export async function fetchPullRequest(octokit: Octokit, repo: RepoRef, number: 
     };
 }
 
-export type BaseFile = { kind: 'found'; text: string } | { kind: 'missing' } | { kind: 'unreadable'; error: string };
+export type RepoFile = { kind: 'found'; text: string } | { kind: 'missing' } | { kind: 'unreadable'; error: string };
 
-export async function fetchBaseFile(octokit: Octokit, repo: RepoRef, baseRef: string, path: string): Promise<BaseFile> {
+export async function fetchFile(octokit: Octokit, repo: RepoRef, ref: string, path: string): Promise<RepoFile> {
     let data;
     try {
-        ({ data } = await octokit.rest.repos.getContent({ ...repo, path, ref: baseRef }));
+        ({ data } = await octokit.rest.repos.getContent({ ...repo, path, ref }));
     } catch (error) {
         if (isNotFound(error)) return { kind: 'missing' };
         throw error;

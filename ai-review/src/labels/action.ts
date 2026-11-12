@@ -20,7 +20,7 @@ async function run(): Promise<void> {
 
     const pr = await fetchPullRequest(octokit, context.repo, number);
     const path = core.getInput('config-path') || DEFAULT_CONFIG_PATH;
-    const lookup = await fetchConfig(octokit, context.repo, pr.baseRef, path);
+    const lookup = await fetchConfig(octokit, context.repo, pr.defaultBranch, path);
     switch (lookup.kind) {
         case 'missing':
             core.info(`\`${path}\` does not exist on \`${lookup.ref}\`, so #${number} gets no AI labels.`);

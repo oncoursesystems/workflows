@@ -53808,6 +53808,7 @@ async function fetchPullRequest(octokit, repo, number4) {
     body: pr.body ?? "",
     author: pr.user.login,
     baseRef: pr.base.ref,
+    defaultBranch: pr.base.repo.default_branch,
     headSha: pr.head.sha,
     draft: pr.draft ?? false,
     files: files.map((file2) => ({
@@ -53820,10 +53821,10 @@ async function fetchPullRequest(octokit, repo, number4) {
     }))
   };
 }
-async function fetchBaseFile(octokit, repo, baseRef, path) {
+async function fetchFile(octokit, repo, ref, path) {
   let data;
   try {
-    ({ data } = await octokit.rest.repos.getContent({ ...repo, path, ref: baseRef }));
+    ({ data } = await octokit.rest.repos.getContent({ ...repo, path, ref }));
   } catch (error63) {
     if (isNotFound(error63)) return { kind: "missing" };
     throw error63;
@@ -53945,7 +53946,7 @@ function renderSummary(classification) {
 // src/risk/github.ts
 var DEFAULT_POLICY_PATH = "review-policy.yml";
 async function fetchPolicy(octokit, repo, baseRef, path) {
-  const file2 = await fetchBaseFile(octokit, repo, baseRef, path);
+  const file2 = await fetchFile(octokit, repo, baseRef, path);
   switch (file2.kind) {
     case "missing":
       return missingPolicy(baseRef);

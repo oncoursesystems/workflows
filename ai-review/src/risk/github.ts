@@ -1,4 +1,4 @@
-import { fetchBaseFile, type Octokit, type RepoRef } from '../github/client.ts';
+import { fetchFile, type Octokit, type RepoRef } from '../github/client.ts';
 import { applyLabelChange, ensureLabels, listLabelNames } from '../github/labels.ts';
 import type { PullRequest } from '../github/pull-request.ts';
 import type { Classification } from './classify.ts';
@@ -9,7 +9,7 @@ import { checkTitle, renderSummary } from './report.ts';
 export const DEFAULT_POLICY_PATH = 'review-policy.yml';
 
 export async function fetchPolicy(octokit: Octokit, repo: RepoRef, baseRef: string, path: string): Promise<PolicyLookup> {
-    const file = await fetchBaseFile(octokit, repo, baseRef, path);
+    const file = await fetchFile(octokit, repo, baseRef, path);
     switch (file.kind) {
         case 'missing':
             return missingPolicy(baseRef);

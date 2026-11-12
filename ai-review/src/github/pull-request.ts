@@ -14,6 +14,7 @@ export type PullRequest = {
     body: string;
     author: string;
     baseRef: string;
+    defaultBranch: string;
     headSha: string;
     draft: boolean;
     files: ChangedFile[];

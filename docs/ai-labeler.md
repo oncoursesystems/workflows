@@ -9,12 +9,12 @@ The action labels a pull request with labels that each repository defines in a Y
 - **Labels from your config**: Each repository lists its own labels and criteria. The action adds or removes only the labels in the config and never touches any other label.
 - **One question per label**: Jev answers each question with the probability that the answer is yes. The `instructions` and `criteria` of a label are sent to Jev as written.
 - **Thresholds that do not flap**: A label is added at `add_at` or above and removed below `remove_at`. Between the two, the label stays as it is, so a borderline pull request does not gain and lose a label on each push. Reruns on the same answers converge on the same labels.
-- **Config from the base branch**: Reads the config from the base branch of the pull request, never from the pull request, so a pull request cannot rewrite the criteria to label itself.
+- **Config from the default branch**: Reads the config from the default branch of the repository, never from the pull request, so a pull request cannot rewrite the criteria to label itself. A pull request stacked on another branch gets the same config as one that targets the default branch.
 - **Creates missing labels**: A label that does not exist in the repository is created with the `color` and `description` from the config.
 - **Drafts are labeled**: A draft pull request is labeled like any other.
-- **Visible failures**: When Jev fails, the labels stay as they were and the step fails with the error. When the config is invalid, the step fails with every parse error. When the base branch has no config, the action logs it and succeeds without asking Jev.
+- **Visible failures**: When Jev fails, the labels stay as they were and the step fails with the error. When the config is invalid, the step fails with every parse error. When the default branch has no config, the action logs it and succeeds without asking Jev.
 - **Job summary**: Shows the model, the input tokens, whether Jev saw the whole diff, and a table of each label with its probability, thresholds, and action.
-- **Backfill**: A `workflow_dispatch` run with the `pull-request` input labels a pull request that has no new event, such as one opened before the workflow existed or one whose base branch changed its config. The comment at the top of the usage example has the loop that runs it for every open pull request.
+- **Backfill**: A `workflow_dispatch` run with the `pull-request` input labels a pull request that has no new event, such as one opened before the workflow existed, or any open pull request after the config changes. The comment at the top of the usage example has the loop that runs it for every open pull request.
 
 ## Inputs
 
@@ -32,7 +32,7 @@ The action labels a pull request with labels that each repository defines in a Y
 
 ### `config-path`
 
-**Optional** Path of the label config, read from the pull request's base branch.
+**Optional** Path of the label config, read from the repository's default branch.
 
 **Default** `.github/ai-labeler.yml`
 
@@ -55,7 +55,7 @@ name: ai-labeler
 
 # This workflow never checks out the pull request. pull_request_target runs with write
 # permissions, so the job must not run code from the pull request. The action reads the
-# pull request through the API and reads its config from the base branch.
+# pull request through the API and reads its config from the default branch.
 #
 # Backfill: after the config changes, or to label pull requests opened before this
 # workflow existed, run the workflow once for each open pull request:
@@ -63,7 +63,7 @@ name: ai-labeler
 #   gh pr list --state open --limit 500 --json number -q '.[].number' |
 #     while read n; do gh workflow run ai-labeler.yml -f pull-request=$n; done
 #
-# Each run reads the config from the pull request's base branch and adds or removes
+# Each run reads the config from the default branch and adds or removes
 # only the labels the config lists.
 
 on:
@@ -148,7 +148,7 @@ Jev reads the title, the description, the author, the list of changed files, and
 
 ## How It Works
 
-1. **Collect**: Reads the pull request and up to 3000 changed files, and the config from the base branch.
+1. **Collect**: Reads the pull request and up to 3000 changed files, and the config from the default branch.
 2. **Ask Jev**: Sends one request to TypeSafe's Jev with the pull request and one `noul` question for each label. Rate limits (`429` and `529`) are retried three times. A request too long for the model is retried with a smaller diff, and then with a shorter file list. Any other error, or no answer within 60 seconds, counts as a Jev failure.
 3. **Reconcile**: Compares each probability with the thresholds of its label and the labels already on the pull request.
 4. **Publish**: Creates any missing labels, adds and removes the labels, sets the `labels` output, and writes the job summary.
@@ -163,7 +163,7 @@ npm ci
 GH_TOKEN=... TYPESAFE_API_KEY=... npm run labels -- example-org/example-repo#123 --dry-run
 ```
 
-Pass a pull request URL instead of `owner/repo#number` if you prefer. Without `GH_TOKEN`, the command uses `gh auth token`. Pass `--config-file <path>` to try a local config instead of the one on the base branch, and `--jev-model <id>` to try another model. Without `--dry-run`, the command adds and removes the labels, just as the action does.
+Pass a pull request URL instead of `owner/repo#number` if you prefer. Without `GH_TOKEN`, the command uses `gh auth token`. Pass `--config-file <path>` to try a local config instead of the one on the default branch, and `--jev-model <id>` to try another model. Without `--dry-run`, the command adds and removes the labels, just as the action does.
 
 ## Development
 

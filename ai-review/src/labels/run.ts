@@ -1,4 +1,4 @@
-import { fetchBaseFile, type Octokit, type RepoRef } from '../github/client.ts';
+import { fetchFile, type Octokit, type RepoRef } from '../github/client.ts';
 import { applyLabelChange, ensureLabels, listLabelNames, type LabelChange } from '../github/labels.ts';
 import type { PullRequest } from '../github/pull-request.ts';
 import { askJev } from '../jev/ask.ts';
@@ -8,15 +8,15 @@ import { lookupConfig, type ConfigLookup, type LabelRule } from './config.ts';
 import { labelQuestions, parseLabelResponse } from './questions.ts';
 import { changeOf, decideAll, managedLabelsAfter, type LabelDecision } from './reconcile.ts';
 
-export async function fetchConfig(octokit: Octokit, repo: RepoRef, baseRef: string, path: string): Promise<ConfigLookup> {
-    const file = await fetchBaseFile(octokit, repo, baseRef, path);
+export async function fetchConfig(octokit: Octokit, repo: RepoRef, ref: string, path: string): Promise<ConfigLookup> {
+    const file = await fetchFile(octokit, repo, ref, path);
     switch (file.kind) {
         case 'missing':
-            return { kind: 'missing', ref: baseRef };
+            return { kind: 'missing', ref };
         case 'unreadable':
-            return { kind: 'invalid', ref: baseRef, error: file.error };
+            return { kind: 'invalid', ref, error: file.error };
         case 'found':
-            return lookupConfig(file.text, baseRef);
+            return lookupConfig(file.text, ref);
     }
 }
 

@@ -10,6 +10,7 @@ export const pr = (files: ChangedFile[]): PullRequest => ({
     body: 'Body',
     author: 'dev',
     baseRef: 'master',
+    defaultBranch: 'master',
     headSha: 'abc',
     draft: false,
     files,
