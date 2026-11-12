@@ -15,6 +15,7 @@ The web workflow is designed to build and publish Docker images to a registry an
 
 ### Actions
 
+- [ai-labeler](.github/actions/ai-labeler/action.yml) ([docs](docs/ai-labeler.md)) - Labels a pull request with the labels a repository defines, each added or removed by Jev's answer to one yes or no question
 - [ai-review](.github/actions/ai-review/action.yml) ([docs](docs/ai-review.md)) - Reviews a pull request with Claude bug finders sized by its risk tier and posts the findings that three reviewers confirm
 - [create-release](.github/workflows/create-release.yml) ([docs](docs/create-release.md)) - Creates a GitHub release and publishes a Docker image with the current timestamp as the tag
 - [docker-build](.github/workflows/docker-build.yml) ([docs](docs/docker-build.md)) - Builds a Docker image and pushes it to a registry

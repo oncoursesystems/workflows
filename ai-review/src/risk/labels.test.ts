@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { missingLabels, reconcileRiskLabels } from './labels.ts';
+import { reconcileRiskLabels } from './labels.ts';
 
 describe('reconcileRiskLabels', () => {
     it('swaps a stale tier label for the new one', () => {
@@ -19,12 +19,5 @@ describe('reconcileRiskLabels', () => {
 
     it('leaves other labels alone', () => {
         expect(reconcileRiskLabels(['bug', 'needs-human-review'], 'medium')).toEqual({ add: ['risk:medium'], remove: [] });
-    });
-});
-
-describe('missingLabels', () => {
-    it('lists only the labels the repo lacks, with their colors', () => {
-        const missing = missingLabels(['risk:low', 'risk:medium', 'bug']);
-        expect(missing).toEqual([{ name: 'risk:high', color: 'd93f0b', description: 'Risk tier: high' }]);
     });
 });

@@ -1,5 +1,5 @@
-import type { Octokit, RepoRef } from '../risk/github.ts';
-import type { ChangedFile } from '../risk/pull-request.ts';
+import type { Octokit, RepoRef } from '../github/client.ts';
+import type { ChangedFile } from '../github/pull-request.ts';
 import { TIERS, type Tier } from '../risk/tier.ts';
 import type { RepoRules } from './prompts.ts';
 import { SUMMARY_MARKER, fingerprintsIn } from './state.ts';

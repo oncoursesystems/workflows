@@ -1,6 +1,5 @@
+import type { LabelChange, LabelSpec } from '../github/labels.ts';
 import { TIERS, type Tier } from './tier.ts';
-
-export type LabelSpec = { name: string; color: string; description: string };
 
 export const RISK_LABELS: Record<Tier, LabelSpec> = {
     low: { name: 'risk:low', color: '0e8a16', description: 'Risk tier: low' },
@@ -8,9 +7,7 @@ export const RISK_LABELS: Record<Tier, LabelSpec> = {
     high: { name: 'risk:high', color: 'd93f0b', description: 'Risk tier: high' },
 };
 
-const ALL_LABELS: readonly LabelSpec[] = TIERS.map((tier) => RISK_LABELS[tier]);
-
-export type LabelChange = { add: string[]; remove: string[] };
+export const ALL_LABELS: readonly LabelSpec[] = TIERS.map((tier) => RISK_LABELS[tier]);
 
 export function reconcileRiskLabels(current: readonly string[], tier: Tier): LabelChange {
     const wanted = RISK_LABELS[tier].name;
@@ -20,6 +17,3 @@ export function reconcileRiskLabels(current: readonly string[], tier: Tier): Lab
         remove: current.filter((name) => stale.includes(name)),
     };
 }
-
-export const missingLabels = (existing: readonly string[]): LabelSpec[] =>
-    ALL_LABELS.filter((label) => !existing.includes(label.name));

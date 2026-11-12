@@ -1,0 +1,28 @@
+labels:
+  ai:
+    color: 5319e7
+    description: Adds or changes an AI feature of the application
+    instructions:
+      task: >-
+        Does the pull request described by `pull_request`, `files`, and `diff` add or change an AI feature of the
+        application? The known AI features are listed in `ai_features`, and a new feature that sends content to an
+        AI model and acts on its answer also counts.
+      ai_features:
+        - name: AI client
+          covers: >-
+            The shared client every AI feature uses: the OnCourse.Infrastructure.AI package reference, the
+            IDecisionClient registration, the TypeSafe settings in appsettings, and the fake decision client in tests.
+        - name: Message safety screening
+          covers: >-
+            Screens student posts with an AI model and classifies reported posts. Its code is named MessageSafety:
+            MessageSafetyService, MessageSafetyClassifier, MessageSafetyRepository, MessageSafetyWorker, and the
+            models under Models/MessageSafety.
+        - name: Essay rubric grading
+          covers: >-
+            Grades submitted essays against their rubric with Jev and stores the suggestions. Its code is named Jev:
+            the Jev services, the JevGradingWorker, and the models under Models/Jev.
+    criteria:
+      true: The change alters the code, data, configuration, or tests of an AI feature, or adds a new one.
+      false: >-
+        No AI feature changes. Developer tooling, CI workflows, code review bots, and coding-agent settings that use
+        AI do not count, and neither do changes to other behavior in a file that also calls an AI feature.

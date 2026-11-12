@@ -1,8 +1,9 @@
 import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
 import { assess } from './assess.ts';
-import { DEFAULT_POLICY_PATH, fetchPolicy, fetchPullRequest, parsePullRequestNumber, publish } from './github.ts';
-import { DEFAULT_JEV_MODEL } from './jev.ts';
+import { fetchPullRequest, parsePullRequestNumber } from '../github/client.ts';
+import { DEFAULT_JEV_MODEL } from '../jev/transport.ts';
+import { DEFAULT_POLICY_PATH, fetchPolicy, publish } from './github.ts';
 import { renderSummary } from './report.ts';
 
 async function run(): Promise<void> {

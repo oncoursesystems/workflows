@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { getOctokit } from '@actions/github';
 import { assess, type JevMode } from './assess.ts';
-import { DEFAULT_POLICY_PATH, fetchPolicy, fetchPullRequest, parseRepo } from './github.ts';
-import { DEFAULT_JEV_MODEL } from './jev.ts';
+import { fetchPullRequest, parseRepo } from '../github/client.ts';
+import { DEFAULT_JEV_MODEL } from '../jev/transport.ts';
+import { DEFAULT_POLICY_PATH, fetchPolicy } from './github.ts';
 import { lookupPolicy } from './policy.ts';
 import { renderSummary } from './report.ts';
 

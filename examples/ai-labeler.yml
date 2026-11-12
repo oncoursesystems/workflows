@@ -1,0 +1,32 @@
+name: ai-labeler
+
+# pull_request_target runs with write permissions, so the job must not run code from the pull request.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pull-request:
+        description: Number of the pull request to label
+        required: true
+        type: number
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.pull-request }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  ai-labeler:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: oncoursesystems/workflows/.github/actions/ai-labeler@main
+        with:
+          github-token: ${{ github.token }}
+          typesafe-api-key: ${{ secrets.TYPESAFE_AI_KEY }}
+          pull-request: ${{ inputs.pull-request }}

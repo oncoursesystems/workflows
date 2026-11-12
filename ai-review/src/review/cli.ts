@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { getOctokit } from '@actions/github';
-import { parsePullRequestNumber, parseRepo } from '../risk/github.ts';
+import { parsePullRequestNumber, parseRepo } from '../github/client.ts';
 import { runAgent } from './agent.ts';
 import { renderAgentLog } from './report.ts';
 import { runReview } from './run.ts';

@@ -1,6 +1,6 @@
 import type { JevResult } from './jev.ts';
 import { globMatcher, policyOf, type Policy, type PolicyLookup } from './policy.ts';
-import type { PullRequest } from './pull-request.ts';
+import type { PullRequest } from '../github/pull-request.ts';
 import { TIERS, maxTier, type Tier } from './tier.ts';
 
 export type Reason = { source: 'policy' | 'size' | 'jev' | 'flag' | 'fallback'; tier: Tier; text: string };

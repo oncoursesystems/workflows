@@ -53542,55 +53542,16 @@ function classify(pr, lookup, jev) {
   };
 }
 
-// src/risk/jev.ts
-var DEFAULT_JEV_MODEL = "jev-1.14.0";
-var ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+// src/jev/state.ts
 var JEV_QUESTION_CONTEXT_TOKENS = 32e3;
-var QUESTION_HEADROOM_TOKENS = 8500;
 var MEASURED_CHARS_PER_TOKEN = 3.4;
-var STATE_BUDGET_CHARS = Math.floor(
-  (JEV_QUESTION_CONTEXT_TOKENS - QUESTION_HEADROOM_TOKENS) * MEASURED_CHARS_PER_TOKEN
-);
-var REQUEST_TIMEOUT_MS = 6e4;
-var ATTEMPTS = 3;
-var BASE_BACKOFF_MS = 2e3;
-var RETRYABLE_STATUSES = /* @__PURE__ */ new Set([429, 529]);
-var ERROR_TEXT_LIMIT = 500;
-var CONTEXT_RETRIES = 6;
-var MIN_DIFF_CHARS = 1e3;
-var TIER_QUESTION = {
-  type: "choice",
-  instructions: "How much human review does the pull request described by `pull_request`, `files`, and `diff` need before merge, judged by what could go wrong for school districts if the change is wrong?",
-  criteria: {
-    low: "Little review: documentation, Claude skills under `.claude/`, test-only changes and test tooling under `tests/`, Sass or CSS, copy text, or additive code behind an existing feature flag.",
-    medium: "Normal review: everything that is neither low nor high, including large features, performance work, data fixes, server code, front-end logic, and configuration.",
-    high: "Careful review, only for: authentication or permissions (SAML, OAuth, FIDO2, Duo, login-as-user, role checks), the district or school scoping that limits users to their own records, CI workflows, or deploy scripts. Size, performance, and new features alone never make a change high."
-  }
-};
-var ACCESS_CHANGE_QUESTION = {
-  type: "noul",
-  instructions: "Does the change in `diff` alter the rules that decide which users may see or change which records?",
-  criteria: {
-    true: "It changes sign-in or session handling, a role or permission check, or the district or school scoping that limits a user to their own organization records.",
-    false: "Those rules are unchanged. Filters, searches, and selections a user makes inside screens they can already open are not access changes, and neither are test tools or developer tooling."
-  }
-};
-var sensitiveAreaQuestion = (areas) => ({
-  type: "noul",
-  instructions: {
-    task: "Does the change in `diff` alter how any of these sensitive areas is calculated, saved, deleted, or sent? A feature flag around the change does not matter.",
-    sensitive_areas: areas.map((area) => ({ name: area.name, covers: area.covers }))
-  },
-  criteria: {
-    true: "The change alters how one of the sensitive areas is calculated, saved, deleted, or sent.",
-    false: "No sensitive area changes behavior. Copy text, styling, and tests inside these modules are not behavior changes."
-  }
-});
-var jevQuestions = (areas) => ({
-  tier: TIER_QUESTION,
-  access_change: ACCESS_CHANGE_QUESTION,
-  ...areas.length === 0 ? {} : { sensitive_area: sensitiveAreaQuestion(areas) }
-});
+var JEV_OVERHEAD_TOKENS = 300;
+var DENSE_CODE_MARGIN_TOKENS = 7700;
+function stateBudgetChars(questions) {
+  const largestQuestion = Math.max(0, ...Object.values(questions).map((question) => JSON.stringify(question).length));
+  const context3 = (JEV_QUESTION_CONTEXT_TOKENS - JEV_OVERHEAD_TOKENS - DENSE_CODE_MARGIN_TOKENS) * MEASURED_CHARS_PER_TOKEN;
+  return Math.max(0, Math.floor(context3 - largestQuestion));
+}
 var fileDiff = (file2) => {
   const header = `diff --git a/${file2.previousPath ?? file2.path} b/${file2.path} (${file2.status})`;
   return `${header}
@@ -53641,43 +53602,15 @@ function buildState(pr, fileList, diff) {
     diff: diff.text
   };
 }
-var probability = external_exports.number().min(0).max(1);
-var noulAnswer = external_exports.object({ type: external_exports.literal("noul"), noul: probability });
-var ResponseBody = external_exports.object({
-  model: external_exports.string(),
-  answers: external_exports.object({
-    tier: external_exports.object({
-      type: external_exports.literal("choice"),
-      choice: external_exports.enum(TIERS),
-      probabilities: external_exports.object({ low: probability, medium: probability, high: probability })
-    }),
-    access_change: noulAnswer,
-    sensitive_area: noulAnswer.optional()
-  }),
-  usage: external_exports.object({ input_tokens: external_exports.number().int().nonnegative() })
-});
-function parseResponse(body, askedSensitiveArea) {
-  const result = ResponseBody.safeParse(body);
-  if (!result.success) {
-    const issues = result.error.issues.map((issue3) => `${issue3.path.join(".")}: ${issue3.message}`);
-    return { ok: false, error: `unexpected response: ${issues.join("; ")}` };
-  }
-  const { model, answers, usage } = result.data;
-  if (askedSensitiveArea && answers.sensitive_area === void 0) {
-    return { ok: false, error: "unexpected response: answers.sensitive_area is missing" };
-  }
-  return {
-    ok: true,
-    verdict: {
-      model,
-      tier: answers.tier.choice,
-      tierProbabilities: answers.tier.probabilities,
-      accessChange: answers.access_change.noul,
-      sensitiveArea: askedSensitiveArea ? answers.sensitive_area?.noul ?? null : null,
-      inputTokens: usage.input_tokens
-    }
-  };
-}
+
+// src/jev/transport.ts
+var DEFAULT_JEV_MODEL = "jev-1.14.0";
+var ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+var REQUEST_TIMEOUT_MS = 6e4;
+var ATTEMPTS = 3;
+var BASE_BACKOFF_MS = 2e3;
+var RETRYABLE_STATUSES = /* @__PURE__ */ new Set([429, 529]);
+var ERROR_TEXT_LIMIT = 500;
 var truncate = (text) => text.length > ERROR_TEXT_LIMIT ? `${text.slice(0, ERROR_TEXT_LIMIT)}...` : text;
 function retryDelayMs(retryAfter, attempt) {
   if (retryAfter !== null) {
@@ -53721,18 +53654,20 @@ async function post(body, options) {
     return { kind: "error", error: `HTTP ${response.status}: ${truncate(text)}` };
   }
 }
-async function askJev(pr, policy, options) {
-  const isIgnored = globMatcher(policy.ignore);
-  const files = pr.files.filter((file2) => !isIgnored(file2.path));
-  const questions = jevQuestions(policy.sensitiveAreas);
-  const askedSensitiveArea = "sensitive_area" in questions;
+
+// src/jev/ask.ts
+var CONTEXT_RETRIES = 6;
+var MIN_DIFF_CHARS = 1e3;
+async function askJev(ask, options) {
+  const { pr, files, questions } = ask;
+  const budget = stateBudgetChars(questions);
   const empty = { text: "", coverage: "complete" };
   const metadata = JSON.stringify(buildState(pr, { entries: [], total: 0 }, empty)).length;
-  let fileBudget = STATE_BUDGET_CHARS - metadata;
+  let fileBudget = budget - metadata;
   let fileList = fileListThatFits(files, fileBudget);
   const request2 = (diff2) => JSON.stringify({ model: options.model, state: buildState(pr, fileList, diff2), questions });
   const withoutDiff = JSON.stringify(buildState(pr, fileList, empty)).length;
-  let diff = diffOfWholeFilesThatFit(files, STATE_BUDGET_CHARS - withoutDiff);
+  let diff = diffOfWholeFilesThatFit(files, budget - withoutDiff);
   let attempt = await post(request2(diff), options);
   for (let retry = 0; attempt.kind === "too-long" && retry < CONTEXT_RETRIES; retry++) {
     if (diff.coverage === "omitted") {
@@ -53750,17 +53685,191 @@ async function askJev(pr, policy, options) {
     case "error":
       return { status: "failed", error: attempt.error };
     case "ok": {
-      const parsed = parseResponse(attempt.body, askedSensitiveArea);
+      const parsed = ask.parse(attempt.body);
       if (!parsed.ok) return { status: "failed", error: parsed.error };
-      return { status: "answered", verdict: { ...parsed.verdict, diff: diff.coverage } };
+      return { status: "answered", value: parsed.value, diff: diff.coverage };
     }
   }
 }
 
+// src/jev/response.ts
+var probability = external_exports.number().min(0).max(1);
+var noulAnswer = external_exports.object({ type: external_exports.literal("noul"), noul: probability });
+var usage = external_exports.object({ input_tokens: external_exports.number().int().nonnegative() });
+var describeIssues = (error63, root = "file") => error63.issues.map((issue3) => `${issue3.path.length > 0 ? issue3.path.join(".") : root}: ${issue3.message}`).join("; ");
+
+// src/risk/jev.ts
+var TIER_QUESTION = {
+  type: "choice",
+  instructions: "How much human review does the pull request described by `pull_request`, `files`, and `diff` need before merge, judged by what could go wrong for school districts if the change is wrong?",
+  criteria: {
+    low: "Little review: documentation, Claude skills under `.claude/`, test-only changes and test tooling under `tests/`, Sass or CSS, copy text, or additive code behind an existing feature flag.",
+    medium: "Normal review: everything that is neither low nor high, including large features, performance work, data fixes, server code, front-end logic, and configuration.",
+    high: "Careful review, only for: authentication or permissions (SAML, OAuth, FIDO2, Duo, login-as-user, role checks), the district or school scoping that limits users to their own records, CI workflows, or deploy scripts. Size, performance, and new features alone never make a change high."
+  }
+};
+var ACCESS_CHANGE_QUESTION = {
+  type: "noul",
+  instructions: "Does the change in `diff` alter the rules that decide which users may see or change which records?",
+  criteria: {
+    true: "It changes sign-in or session handling, a role or permission check, or the district or school scoping that limits a user to their own organization records.",
+    false: "Those rules are unchanged. Filters, searches, and selections a user makes inside screens they can already open are not access changes, and neither are test tools or developer tooling."
+  }
+};
+var sensitiveAreaQuestion = (areas) => ({
+  type: "noul",
+  instructions: {
+    task: "Does the change in `diff` alter how any of these sensitive areas is calculated, saved, deleted, or sent? A feature flag around the change does not matter.",
+    sensitive_areas: areas.map((area) => ({ name: area.name, covers: area.covers }))
+  },
+  criteria: {
+    true: "The change alters how one of the sensitive areas is calculated, saved, deleted, or sent.",
+    false: "No sensitive area changes behavior. Copy text, styling, and tests inside these modules are not behavior changes."
+  }
+});
+var jevQuestions = (areas) => ({
+  tier: TIER_QUESTION,
+  access_change: ACCESS_CHANGE_QUESTION,
+  ...areas.length === 0 ? {} : { sensitive_area: sensitiveAreaQuestion(areas) }
+});
+var ResponseBody = external_exports.object({
+  model: external_exports.string(),
+  answers: external_exports.object({
+    tier: external_exports.object({
+      type: external_exports.literal("choice"),
+      choice: external_exports.enum(TIERS),
+      probabilities: external_exports.object({ low: probability, medium: probability, high: probability })
+    }),
+    access_change: noulAnswer,
+    sensitive_area: noulAnswer.optional()
+  }),
+  usage
+});
+function parseResponse(body, askedSensitiveArea) {
+  const result = ResponseBody.safeParse(body);
+  if (!result.success) return { ok: false, error: `unexpected response: ${describeIssues(result.error, "response")}` };
+  const { model, answers, usage: usage2 } = result.data;
+  if (askedSensitiveArea && answers.sensitive_area === void 0) {
+    return { ok: false, error: "unexpected response: answers.sensitive_area is missing" };
+  }
+  return {
+    ok: true,
+    verdict: {
+      model,
+      tier: answers.tier.choice,
+      tierProbabilities: answers.tier.probabilities,
+      accessChange: answers.access_change.noul,
+      sensitiveArea: askedSensitiveArea ? answers.sensitive_area?.noul ?? null : null,
+      inputTokens: usage2.input_tokens
+    }
+  };
+}
+async function askJev2(pr, policy, options) {
+  const isIgnored = globMatcher(policy.ignore);
+  const questions = jevQuestions(policy.sensitiveAreas);
+  const askedSensitiveArea = "sensitive_area" in questions;
+  const answer = await askJev(
+    {
+      pr,
+      files: pr.files.filter((file2) => !isIgnored(file2.path)),
+      questions,
+      parse: (body) => {
+        const parsed = parseResponse(body, askedSensitiveArea);
+        return parsed.ok ? { ok: true, value: parsed.verdict } : parsed;
+      }
+    },
+    options
+  );
+  if (answer.status === "failed") return answer;
+  return { status: "answered", verdict: { ...answer.value, diff: answer.diff } };
+}
+
 // src/risk/assess.ts
 async function assess(pr, lookup, mode) {
-  const jev = mode.kind === "ask" ? await askJev(pr, policyOf(lookup), mode.options) : { status: "skipped" };
+  const jev = mode.kind === "ask" ? await askJev2(pr, policyOf(lookup), mode.options) : { status: "skipped" };
   return classify(pr, lookup, jev);
+}
+
+// src/github/client.ts
+var parsePullRequestNumber = (text) => {
+  if (!/^[1-9]\d*$/.test(text.trim())) throw new Error(`expected a pull request number, got "${text}"`);
+  return Number(text);
+};
+var status = (error63) => typeof error63 === "object" && error63 !== null && "status" in error63 ? Number(error63.status) : void 0;
+var isNotFound = (error63) => status(error63) === 404;
+var isAlreadyExists = (error63) => status(error63) === 422;
+async function fetchPullRequest(octokit, repo, number4) {
+  const { data: pr } = await octokit.rest.pulls.get({ ...repo, pull_number: number4 });
+  const files = await octokit.paginate(octokit.rest.pulls.listFiles, { ...repo, pull_number: number4, per_page: 100 });
+  return {
+    repo: `${repo.owner}/${repo.repo}`,
+    number: number4,
+    title: pr.title,
+    body: pr.body ?? "",
+    author: pr.user.login,
+    baseRef: pr.base.ref,
+    headSha: pr.head.sha,
+    draft: pr.draft ?? false,
+    files: files.map((file2) => ({
+      path: file2.filename,
+      ...file2.previous_filename === void 0 ? {} : { previousPath: file2.previous_filename },
+      status: file2.status,
+      additions: file2.additions,
+      deletions: file2.deletions,
+      ...file2.patch === void 0 ? {} : { patch: file2.patch }
+    }))
+  };
+}
+async function fetchBaseFile(octokit, repo, baseRef, path) {
+  let data;
+  try {
+    ({ data } = await octokit.rest.repos.getContent({ ...repo, path, ref: baseRef }));
+  } catch (error63) {
+    if (isNotFound(error63)) return { kind: "missing" };
+    throw error63;
+  }
+  if (Array.isArray(data) || data.type !== "file" || !("encoding" in data) || data.encoding !== "base64") {
+    return { kind: "unreadable", error: `\`${path}\` is not a readable file of at most 1 MB` };
+  }
+  return { kind: "found", text: Buffer.from(data.content, "base64").toString("utf8") };
+}
+
+// src/github/labels.ts
+var hasLabel = (labels, name) => {
+  const lower = name.toLowerCase();
+  return labels.some((label) => label.toLowerCase() === lower);
+};
+var missingLabels = (existing, specs) => specs.filter((spec) => !hasLabel(existing, spec.name));
+async function ensureLabels(octokit, repo, specs) {
+  const existing = await octokit.paginate(octokit.rest.issues.listLabelsForRepo, { ...repo, per_page: 100 });
+  for (const spec of missingLabels(existing.map((l) => l.name), specs)) {
+    try {
+      await octokit.rest.issues.createLabel({
+        ...repo,
+        name: spec.name,
+        ...spec.color === void 0 ? {} : { color: spec.color },
+        ...spec.description === void 0 ? {} : { description: spec.description }
+      });
+    } catch (error63) {
+      if (!isAlreadyExists(error63)) throw error63;
+    }
+  }
+}
+async function listLabelNames(octokit, repo, number4) {
+  const labels = await octokit.paginate(octokit.rest.issues.listLabelsOnIssue, { ...repo, issue_number: number4, per_page: 100 });
+  return labels.map((label) => label.name);
+}
+async function applyLabelChange(octokit, repo, number4, change) {
+  if (change.add.length > 0) {
+    await octokit.rest.issues.addLabels({ ...repo, issue_number: number4, labels: change.add });
+  }
+  for (const name of change.remove) {
+    try {
+      await octokit.rest.issues.removeLabel({ ...repo, issue_number: number4, name });
+    } catch (error63) {
+      if (!isNotFound(error63)) throw error63;
+    }
+  }
 }
 
 // src/risk/labels.ts
@@ -53778,13 +53887,19 @@ function reconcileRiskLabels(current, tier) {
     remove: current.filter((name) => stale.includes(name))
   };
 }
-var missingLabels = (existing) => ALL_LABELS.filter((label) => !existing.includes(label.name));
+
+// src/jev/report.ts
+var cell = (text) => text.replaceAll("|", "\\|").replaceAll(/\r?\n/g, " ");
+var percent2 = (p) => `${(p * 100).toFixed(1)}%`;
+var DIFF_NOTE = {
+  complete: "Jev saw the whole diff.",
+  truncated: "The diff was truncated to fit the model context.",
+  omitted: "The diff was too large for the model context, so Jev saw only the file list."
+};
 
 // src/risk/report.ts
 var TIER_TITLE = { low: "Low risk", medium: "Medium risk", high: "High risk" };
 var checkTitle = (tier) => TIER_TITLE[tier];
-var cell = (text) => text.replaceAll("|", "\\|").replaceAll(/\r?\n/g, " ");
-var percent2 = (p) => `${(p * 100).toFixed(1)}%`;
 function jevSection(jev) {
   switch (jev.status) {
     case "skipped":
@@ -53793,13 +53908,8 @@ function jevSection(jev) {
       return [`Jev failed: ${jev.error}`];
     case "answered": {
       const { verdict } = jev;
-      const diffNote = {
-        complete: "Jev saw the whole diff.",
-        truncated: "The diff was truncated to fit the model context.",
-        omitted: "The diff was too large for the model context, so Jev saw only the file list."
-      }[verdict.diff];
       return [
-        `Model \`${verdict.model}\`, ${verdict.inputTokens.toLocaleString("en-US")} input tokens. ${diffNote}`,
+        `Model \`${verdict.model}\`, ${verdict.inputTokens.toLocaleString("en-US")} input tokens. ${DIFF_NOTE[verdict.diff]}`,
         "",
         "| Jev tier | Probability |",
         "| --- | --- |",
@@ -53834,75 +53944,21 @@ function renderSummary(classification) {
 
 // src/risk/github.ts
 var DEFAULT_POLICY_PATH = "review-policy.yml";
-var parsePullRequestNumber = (text) => {
-  if (!/^[1-9]\d*$/.test(text.trim())) throw new Error(`expected a pull request number, got "${text}"`);
-  return Number(text);
-};
-var status = (error63) => typeof error63 === "object" && error63 !== null && "status" in error63 ? Number(error63.status) : void 0;
-var isNotFound = (error63) => status(error63) === 404;
-var isAlreadyExists = (error63) => status(error63) === 422;
-async function fetchPullRequest(octokit, repo, number4) {
-  const { data: pr } = await octokit.rest.pulls.get({ ...repo, pull_number: number4 });
-  const files = await octokit.paginate(octokit.rest.pulls.listFiles, { ...repo, pull_number: number4, per_page: 100 });
-  return {
-    repo: `${repo.owner}/${repo.repo}`,
-    number: number4,
-    title: pr.title,
-    body: pr.body ?? "",
-    author: pr.user.login,
-    baseRef: pr.base.ref,
-    headSha: pr.head.sha,
-    draft: pr.draft ?? false,
-    files: files.map((file2) => ({
-      path: file2.filename,
-      ...file2.previous_filename === void 0 ? {} : { previousPath: file2.previous_filename },
-      status: file2.status,
-      additions: file2.additions,
-      deletions: file2.deletions,
-      ...file2.patch === void 0 ? {} : { patch: file2.patch }
-    }))
-  };
-}
 async function fetchPolicy(octokit, repo, baseRef, path) {
-  let data;
-  try {
-    ({ data } = await octokit.rest.repos.getContent({ ...repo, path, ref: baseRef }));
-  } catch (error63) {
-    if (isNotFound(error63)) return missingPolicy(baseRef);
-    throw error63;
-  }
-  if (Array.isArray(data) || data.type !== "file" || !("encoding" in data) || data.encoding !== "base64") {
-    return { kind: "invalid", ref: baseRef, error: `\`${path}\` is not a readable file of at most 1 MB` };
-  }
-  return lookupPolicy(Buffer.from(data.content, "base64").toString("utf8"), baseRef);
-}
-async function ensureLabels(octokit, repo) {
-  const existing = await octokit.paginate(octokit.rest.issues.listLabelsForRepo, { ...repo, per_page: 100 });
-  for (const label of missingLabels(existing.map((l) => l.name))) {
-    try {
-      await octokit.rest.issues.createLabel({ ...repo, ...label });
-    } catch (error63) {
-      if (!isAlreadyExists(error63)) throw error63;
-    }
-  }
-}
-async function setRiskLabel(octokit, repo, pr, classification) {
-  const { data: labels } = await octokit.rest.issues.listLabelsOnIssue({ ...repo, issue_number: pr.number, per_page: 100 });
-  const change = reconcileRiskLabels(labels.map((l) => l.name), classification.tier);
-  if (change.add.length > 0) {
-    await octokit.rest.issues.addLabels({ ...repo, issue_number: pr.number, labels: change.add });
-  }
-  for (const name of change.remove) {
-    try {
-      await octokit.rest.issues.removeLabel({ ...repo, issue_number: pr.number, name });
-    } catch (error63) {
-      if (!isNotFound(error63)) throw error63;
-    }
+  const file2 = await fetchBaseFile(octokit, repo, baseRef, path);
+  switch (file2.kind) {
+    case "missing":
+      return missingPolicy(baseRef);
+    case "unreadable":
+      return { kind: "invalid", ref: baseRef, error: file2.error };
+    case "found":
+      return lookupPolicy(file2.text, baseRef);
   }
 }
 async function publish(octokit, repo, pr, classification) {
-  await ensureLabels(octokit, repo);
-  await setRiskLabel(octokit, repo, pr, classification);
+  await ensureLabels(octokit, repo, ALL_LABELS);
+  const current = await listLabelNames(octokit, repo, pr.number);
+  await applyLabelChange(octokit, repo, pr.number, reconcileRiskLabels(current, classification.tier));
   await octokit.rest.checks.create({
     ...repo,
     name: "risk-tier",

@@ -123,7 +123,7 @@ List `review-policy.yml` itself under `high`, so a change to the policy gets car
 ## How It Works
 
 1. **Collect**: Reads the pull request and up to 3000 changed files, and the policy from the base branch.
-2. **Ask Jev**: Sends one request to TypeSafe's Jev with the title, body, author, the list of files that are not ignored, and their diff. Everything Jev reads, the file list included, is kept to about 80,000 characters, which fits Jev's 32,000-token context for one question. When the diff does not fit, it holds as many whole files as fit and ends with a `[diff truncated: N of M files shown]` marker. Jev answers up to three questions at once: the tier, the probability that the change alters who can see or change which records, and, when the policy lists `sensitive_areas`, the probability that the change alters one of them. Rate limits (`429` and `529`) are retried three times. A request too long for the model is retried once without the diff. Any other error, or no answer within 60 seconds, counts as a Jev failure.
+2. **Ask Jev**: Sends one request to TypeSafe's Jev with the title, body, author, the list of files that are not ignored, and their diff. Everything Jev reads, the file list included, is kept to about 81,000 characters minus the size of the largest question, which fits Jev's 32,000-token context for one question. When the diff does not fit, it holds as many whole files as fit and ends with a `[diff truncated: N of M files shown]` marker. Jev answers up to three questions at once: the tier, the probability that the change alters who can see or change which records, and, when the policy lists `sensitive_areas`, the probability that the change alters one of them. Rate limits (`429` and `529`) are retried three times. A request too long for the model is retried with a smaller diff, and then without it. Any other error, or no answer within 60 seconds, counts as a Jev failure.
 3. **Classify**: Each rule gives reasons, and the tier is the highest reason, starting from low.
 
 | Rule | Raises the tier to |
@@ -152,4 +152,4 @@ Without `GH_TOKEN`, the command uses `gh auth token`. Pass `--no-jev` to classif
 
 ## Development
 
-The bundle in `.github/actions/risk-tier/dist` is committed, because callers run it directly. After a change under `ai-review`, run `npm run build` and commit the new bundle. The `ai-review-ci` workflow fails when the committed bundle differs from a fresh build.
+The bundles in `.github/actions/risk-tier/dist` and `.github/actions/ai-labeler/dist` are committed, because callers run them directly. After a change under `ai-review`, run `npm run build` and commit the new bundles. The `ai-review-ci` workflow fails when a committed bundle differs from a fresh build.
