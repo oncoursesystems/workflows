@@ -19,6 +19,7 @@ const pr = (files: ChangedFile[]): PullRequest => ({
     body: '',
     author: 'someone',
     baseRef: 'master',
+    defaultBranch: 'master',
     headSha: 'abc',
     draft: false,
     files,

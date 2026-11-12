@@ -13,8 +13,8 @@ const USAGE = `Usage: npm run labels -- <owner/repo#number | pull request URL> [
 Asks Jev about each label in the config and adds or removes the labels on the pull request.
 
   --dry-run              print the answers and the planned changes, and write nothing
-  --config-file <path>   use a local config file instead of the one on the base branch
-  --config-path <path>   config path on the base branch (default ${DEFAULT_CONFIG_PATH})
+  --config-file <path>   use a local config file instead of the one on the default branch
+  --config-path <path>   config path on the default branch (default ${DEFAULT_CONFIG_PATH})
   --jev-model <id>       Jev model (default ${DEFAULT_JEV_MODEL})
 
 Reads GH_TOKEN (or \`gh auth token\`) and TYPESAFE_API_KEY.`;
@@ -51,7 +51,7 @@ const octokit = getOctokit(githubToken);
 const pr = await fetchPullRequest(octokit, repo, number);
 const lookup =
     values['config-file'] === undefined
-        ? await fetchConfig(octokit, repo, pr.baseRef, values['config-path'])
+        ? await fetchConfig(octokit, repo, pr.defaultBranch, values['config-path'])
         : lookupConfig(readFileSync(values['config-file'], 'utf8'), values['config-file']);
 if (lookup.kind === 'missing') {
     console.log(`No config on ${lookup.ref}, so there is nothing to ask.`);

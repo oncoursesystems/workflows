@@ -14,6 +14,7 @@ const pr: PullRequest = {
     body: '',
     author: 'dev',
     baseRef: 'master',
+    defaultBranch: 'master',
     headSha: 'abc',
     draft: false,
     files: [{ path: 'src/Notes.cs', status: 'modified', additions: 1, deletions: 0, patch: '@@ -1 +1 @@\n+x' }],

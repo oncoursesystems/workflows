@@ -23,7 +23,7 @@ const dropped = finding('dropped', 30);
 const record = reviewRecord(
     {
         kind: 'reviewed',
-        pr: { repo: 'o/r', number: 7, title: 't', body: '', author: 'dev', baseRef: 'master', headSha: 'abc', draft: false, files: [] },
+        pr: { repo: 'o/r', number: 7, title: 't', body: '', author: 'dev', baseRef: 'master', defaultBranch: 'master', headSha: 'abc', draft: false, files: [] },
         scope: 'the whole pull request',
         result: { tier: 'high', findings: [onDiff, offDiff, minor, dropped], candidates: 4, agents: [], costUsd: 2.5, durationMs: 1000 },
         state: { reviewedSha: 'abc', round: 2 },
