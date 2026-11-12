@@ -1,5 +1,5 @@
-import { fetchPullRequest, type Octokit, type RepoRef } from '../risk/github.ts';
-import type { ChangedFile, PullRequest } from '../risk/pull-request.ts';
+import { fetchPullRequest, type Octokit, type RepoRef } from '../github/client.ts';
+import type { ChangedFile, PullRequest } from '../github/pull-request.ts';
 import type { RunAgent } from './agent.ts';
 import type { ReviewedFinding } from './finding.ts';
 import {

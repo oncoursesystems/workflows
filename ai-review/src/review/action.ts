@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
-import { fetchPullRequest, parsePullRequestNumber } from '../risk/github.ts';
+import { fetchPullRequest, parsePullRequestNumber } from '../github/client.ts';
 import { runAgent, runAgentWithApiFallback, UsageLimitError } from './agent.ts';
 import { postCheck } from './github.ts';
 import { reviewRecord } from './record.ts';

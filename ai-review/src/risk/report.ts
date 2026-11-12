@@ -1,14 +1,11 @@
 import type { Classification } from './classify.ts';
+import { DIFF_NOTE, cell, percent } from '../jev/report.ts';
 import type { JevResult } from './jev.ts';
 import { TIERS, type Tier } from './tier.ts';
 
 const TIER_TITLE: Record<Tier, string> = { low: 'Low risk', medium: 'Medium risk', high: 'High risk' };
 
 export const checkTitle = (tier: Tier): string => TIER_TITLE[tier];
-
-const cell = (text: string): string => text.replaceAll('|', '\\|').replaceAll(/\r?\n/g, ' ');
-
-const percent = (p: number): string => `${(p * 100).toFixed(1)}%`;
 
 function jevSection(jev: JevResult): string[] {
     switch (jev.status) {
@@ -18,13 +15,8 @@ function jevSection(jev: JevResult): string[] {
             return [`Jev failed: ${jev.error}`];
         case 'answered': {
             const { verdict } = jev;
-            const diffNote = {
-                complete: 'Jev saw the whole diff.',
-                truncated: 'The diff was truncated to fit the model context.',
-                omitted: 'The diff was too large for the model context, so Jev saw only the file list.',
-            }[verdict.diff];
             return [
-                `Model \`${verdict.model}\`, ${verdict.inputTokens.toLocaleString('en-US')} input tokens. ${diffNote}`,
+                `Model \`${verdict.model}\`, ${verdict.inputTokens.toLocaleString('en-US')} input tokens. ${DIFF_NOTE[verdict.diff]}`,
                 '',
                 '| Jev tier | Probability |',
                 '| --- | --- |',

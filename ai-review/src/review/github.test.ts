@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Octokit } from '../risk/github.ts';
+import type { Octokit } from '../github/client.ts';
 import { waitForRiskTier } from './github.ts';
 
 const checks = (...responses: string[][]) => {

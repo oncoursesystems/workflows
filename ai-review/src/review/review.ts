@@ -1,4 +1,4 @@
-import type { ChangedFile, PullRequest } from '../risk/pull-request.ts';
+import type { ChangedFile, PullRequest } from '../github/pull-request.ts';
 import type { Tier } from '../risk/tier.ts';
 import type { AgentStats, RunAgent } from './agent.ts';
 import {

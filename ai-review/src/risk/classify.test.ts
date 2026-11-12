@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { classify } from './classify.ts';
 import type { JevResult, JevVerdict } from './jev.ts';
 import type { Policy, PolicyLookup } from './policy.ts';
-import type { ChangedFile, PullRequest } from './pull-request.ts';
+import type { ChangedFile, PullRequest } from '../github/pull-request.ts';
 
 const file = (path: string, lines = 10, extra: Partial<ChangedFile> = {}): ChangedFile => ({
     path,

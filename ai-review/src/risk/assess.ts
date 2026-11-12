@@ -1,7 +1,8 @@
 import { classify, type Classification } from './classify.ts';
-import { askJev, type JevOptions, type JevResult } from './jev.ts';
+import type { JevOptions } from '../jev/transport.ts';
+import { askJev, type JevResult } from './jev.ts';
 import { policyOf, type PolicyLookup } from './policy.ts';
-import type { PullRequest } from './pull-request.ts';
+import type { PullRequest } from '../github/pull-request.ts';
 
 export type JevMode = { kind: 'ask'; options: JevOptions } | { kind: 'skip' };
 

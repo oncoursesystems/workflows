@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PullRequest } from '../risk/pull-request.ts';
+import type { PullRequest } from '../github/pull-request.ts';
 import type { AgentRequest, AgentRun, RunAgent } from './agent.ts';
 import { DuplicateGroups, FinderOutput, Verdict, type Candidate } from './finding.ts';
 import { tierFromLabels } from './github.ts';

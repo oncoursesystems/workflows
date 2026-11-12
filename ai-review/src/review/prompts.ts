@@ -1,4 +1,4 @@
-import type { ChangedFile, PullRequest } from '../risk/pull-request.ts';
+import type { ChangedFile, PullRequest } from '../github/pull-request.ts';
 import type { BugKind, Candidate } from './finding.ts';
 
 export type RepoRules = { claudeMd?: string; reviewMd?: string };
