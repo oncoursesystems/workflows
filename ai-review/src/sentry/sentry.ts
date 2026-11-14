@@ -128,6 +128,12 @@ export async function postNote(options: SentryOptions, id: string, text: string)
     await call(options, 'POST', `${issuePath(options, id)}/comments/`, { text });
 }
 
+// Sentry rejects inRelease for a release it has never seen, and an app reports a release only after it deploys.
+// The endpoint answers 208 for a release that exists, and adds the projects it lacks.
+export async function ensureRelease(options: SentryOptions, version: string, projects: readonly string[]): Promise<void> {
+    await call(options, 'POST', `${org(options)}/releases/`, { version, projects });
+}
+
 export async function resolveInRelease(options: SentryOptions, id: string, release: string): Promise<void> {
     await call(options, 'PUT', `${issuePath(options, id)}/`, { status: 'resolved', statusDetails: { inRelease: release } });
 }

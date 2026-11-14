@@ -3,7 +3,7 @@ import { applyLabelChange, ensureLabels, hasLabel } from '../github/labels.ts';
 import { appOf, renderRelease, type AppConfig, type SentryFixConfig } from './config.ts';
 import { labelNames } from './github.ts';
 import { LABELS, markedIssueId, markerMatchesBranch } from './markers.ts';
-import { fetchIssue, resolveInRelease, type SentryOptions } from './sentry.ts';
+import { ensureRelease, fetchIssue, resolveInRelease, type SentryOptions } from './sentry.ts';
 
 export type ReleaseInput = { app: string; version: string; release: string; tag: string; previousTag: string };
 
@@ -87,7 +87,10 @@ export async function resolveRelease(options: ResolveOptions): Promise<{ release
     const tagDate = await commitDate(octokit, repo, input.tag);
     const shipped = fixesInRange(await mergedFixes(octokit, repo, tagDate), await commitsBetween(octokit, repo, input.previousTag, input.tag));
     const outcomes: ResolveOutcome[] = [];
-    if (shipped.length > 0) await ensureLabels(octokit, repo, [LABELS.released]);
+    if (shipped.length > 0) {
+        await ensureLabels(octokit, repo, [LABELS.released]);
+        await ensureRelease(options.sentry, release, app.projects);
+    }
     for (const fix of shipped) {
         try {
             outcomes.push(await resolveFix(options, app, release, fix));
