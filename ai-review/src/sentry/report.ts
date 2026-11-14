@@ -3,7 +3,7 @@ import type { Period, SentryFixConfig } from './config.ts';
 import { frameLine } from './context.ts';
 import type { FixOutput } from './fix.ts';
 import type { CommandRun, PlannedIssue } from './handoff.ts';
-import { defang, issueMarker, renderNoteMark, type NoteMark } from './markers.ts';
+import { commitMarker, defang, issueMarker, renderNoteMark, type NoteMark } from './markers.ts';
 import type { Plan, WalkRow } from './plan.ts';
 
 export const PERIOD_TEXT: Record<Period, string> = { '24h': '24 hours', '7d': '7 days', '14d': '14 days' };
@@ -97,7 +97,8 @@ const verificationNote = (verification: readonly CommandRun[]): string[] =>
               '',
           ];
 
-export function renderPrBody(planned: PlannedIssue, output: FixOutput, verification: readonly CommandRun[]): string {
+// commit is the commit publish pointed the branch at. It is undefined when someone else's commit is on the branch.
+export function renderPrBody(planned: PlannedIssue, output: FixOutput, verification: readonly CommandRun[], commit: string | undefined): string {
     const { context } = planned;
     const { issue } = context;
     const content = [
@@ -139,7 +140,7 @@ export function renderPrBody(planned: PlannedIssue, output: FixOutput, verificat
         '',
         `Opened by sentry-fix at ${output.confidence} confidence. Review it like any other pull request.`,
     ].join('\n');
-    return [defang(content), '', issueMarker(issue.id), ''].join('\n');
+    return [defang(content), '', ...(commit === undefined ? [] : [commitMarker(commit)]), issueMarker(issue.id), ''].join('\n');
 }
 
 const note = (mark: string, lines: readonly string[]): string => clip([mark, '', defang(lines.join('\n'))].join('\n'), NOTE_LIMIT);

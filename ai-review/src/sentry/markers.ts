@@ -14,10 +14,21 @@ export const issueMarker = (issueId: string): string => `<!-- sentry-issue: ${is
 
 const ISSUE_MARKER = /^<!-- sentry-issue: (\d+) -->$/;
 
+export const commitMarker = (sha: string): string => `<!-- sentry-fix-commit: ${sha} -->`;
+
+const COMMIT_MARKER = /^<!-- sentry-fix-commit: ([0-9a-f]{40}) -->$/;
+
+const bodyLines = (body: string | null | undefined): string[] =>
+    (body ?? '').split('\n').map((line) => line.trim()).filter((line) => line !== '');
+
 // Sentry and agent text in the body come before the marker, so only the last line counts.
-export const markedIssueId = (body: string | null | undefined): string | undefined => {
-    const lines = (body ?? '').split('\n').map((line) => line.trim()).filter((line) => line !== '');
-    return ISSUE_MARKER.exec(lines.at(-1) ?? '')?.[1];
+export const markedIssueId = (body: string | null | undefined): string | undefined => ISSUE_MARKER.exec(bodyLines(body).at(-1) ?? '')?.[1];
+
+// The commit publish last pointed the branch at, on the line directly above the issue marker.
+export const markedCommit = (body: string | null | undefined): string | undefined => {
+    const lines = bodyLines(body);
+    if (!ISSUE_MARKER.test(lines.at(-1) ?? '')) return undefined;
+    return COMMIT_MARKER.exec(lines.at(-2) ?? '')?.[1];
 };
 
 // A zero-width joiner keeps untrusted text from opening an HTML comment, so it cannot plant or hide a marker.

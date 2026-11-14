@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SentryFixConfig } from './config.ts';
-import { FakeGitHub, PERSON } from './fake-github.ts';
+import { FakeGitHub } from './fake-github.ts';
 import type { FixOutput } from './fix.ts';
 import type { ChangedFile, FixResult, PlannedIssue } from './handoff.ts';
 import { sentryFixNotes } from './plan.ts';
@@ -84,7 +84,7 @@ describe('publish', () => {
         expect(pr.body).toContain('| `npm test` | passed |');
         expect(pr.body).toContain("Claude's own report of its runs, which does not decide the gate");
         expect(pr.body).toContain('`client/web/test/Grid.test.js`');
-        expect(pr.body.trimEnd().endsWith('<!-- sentry-issue: 101 -->')).toBe(true);
+        expect(pr.body.trimEnd().endsWith(`<!-- sentry-fix-commit: ${head} -->\n<!-- sentry-issue: 101 -->`)).toBe(true);
         expect(posted).toEqual([
             '[sentry-fix] pr https://github.com/o/r/pull/101\n\nOpened a fix: fix(gradebook): wait for the period store\n\n' +
                 'Root cause: The grid loads before the period store.\n\nThe workflow ran the project commands itself:\n\n- `npm test` passed\n',
@@ -113,18 +113,36 @@ describe('publish', () => {
         expect(github.calls).toContain('create sentry-fix/oncourse-web-3k -> main');
     });
 
-    it('leaves the branch of an open pull request alone when a person pushed to it, and refreshes only the body', async () => {
+    const openPrOn = (github: FakeGitHub, head: string, body: string) => {
+        github.refs.set('heads/sentry-fix/oncourse-web-3k', head);
+        return github.pr({ number: 60, title: 'a reviewer title', body, head: 'sentry-fix/oncourse-web-3k', labels: ['sentry-autofix'] });
+    };
+
+    const branchCalls = (github: FakeGitHub) =>
+        github.calls.filter((call) => call.startsWith('updateRef') || call.startsWith('createRef') || call.startsWith('create sentry'));
+
+    it('leaves the branch of an open pull request alone when a person pushed on top of its commit, and refreshes only the body', async () => {
         const { github, options } = setup();
-        github.commits.set('f'.repeat(40), { message: 'fixup', tree: 't9', parents: ['a'.repeat(40)], committer: PERSON });
-        github.refs.set('heads/sentry-fix/oncourse-web-3k', 'f'.repeat(40));
-        github.pr({ number: 60, title: 'a reviewer title', body: 'old', head: 'sentry-fix/oncourse-web-3k', labels: ['sentry-autofix'] });
+        const ours = 'e'.repeat(40);
+        github.commits.set(ours, { message: 'fix', tree: 't8', parents: ['a'.repeat(40)] });
+        github.commits.set('f'.repeat(40), { message: 'fixup', tree: 't9', parents: [ours] });
+        const pr = openPrOn(github, 'f'.repeat(40), `old\n\n<!-- sentry-fix-commit: ${ours} -->\n<!-- sentry-issue: 101 -->\n`);
         const result = await publish(planned, done(), options);
         expect(result).toEqual({ kind: 'pr', url: 'https://github.com/o/r/pull/60', created: false, branch: 'kept' });
         expect(github.refs.get('heads/sentry-fix/oncourse-web-3k')).toBe('f'.repeat(40));
-        expect(github.calls.filter((call) => call.startsWith('updateRef') || call.startsWith('createRef') || call.startsWith('create sentry'))).toEqual([]);
-        const pr = github.prs.find((candidate) => candidate.number === 60)!;
+        expect(branchCalls(github)).toEqual([]);
         expect(pr.title).toBe('a reviewer title');
         expect(pr.body).toContain('Fixes ONCOURSE-WEB-3K');
+        expect(pr.body.trimEnd().endsWith(`<!-- sentry-fix-commit: ${ours} -->\n<!-- sentry-issue: 101 -->`)).toBe(true);
+    });
+
+    it("leaves the branch alone when the body records no commit, even for another app's commit on the planned base", async () => {
+        const { github, options } = setup();
+        github.commits.set('f'.repeat(40), { message: 'other app', tree: 't9', parents: ['a'.repeat(40)] });
+        const pr = openPrOn(github, 'f'.repeat(40), 'old\n\n<!-- sentry-issue: 101 -->\n');
+        expect(await publish(planned, done(), options)).toMatchObject({ branch: 'kept' });
+        expect(branchCalls(github)).toEqual([]);
+        expect(pr.body).not.toContain('sentry-fix-commit');
     });
 
     it('moves its own earlier commit on an open pull request to the new fix', async () => {

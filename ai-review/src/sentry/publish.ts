@@ -3,7 +3,7 @@ import { ensureLabels } from '../github/labels.ts';
 import { projectOf, type SentryFixConfig } from './config.ts';
 import { gate, type FixOutput } from './fix.ts';
 import type { ChangedFile, CommandRun, FixResult, PlannedIssue } from './handoff.ts';
-import { branchName, hasNote, LABELS, noteDate, type NoteMark } from './markers.ts';
+import { branchName, hasNote, LABELS, markedCommit, noteDate, type NoteMark } from './markers.ts';
 import { noFixNote, prNote, renderPrBody } from './report.ts';
 import { listNotes, postNote, type SentryOptions } from './sentry.ts';
 
@@ -43,7 +43,7 @@ async function commitChanges(octokit: Octokit, repo: RepoRef, planned: PlannedIs
 
 export type BranchUpdate = 'created' | 'moved' | 'unchanged' | 'kept';
 
-type BranchHead = { sha: string; tree: string; parents: string[]; committer: string };
+type BranchHead = { sha: string; tree: string; parents: string[] };
 
 async function branchHead(octokit: Octokit, repo: RepoRef, branch: string): Promise<BranchHead | undefined> {
     let sha: string;
@@ -54,30 +54,34 @@ async function branchHead(octokit: Octokit, repo: RepoRef, branch: string): Prom
         throw error;
     }
     const { data } = await octokit.rest.git.getCommit({ ...repo, commit_sha: sha });
-    return { sha, tree: data.tree.sha, parents: data.parents.map((parent) => parent.sha), committer: data.committer.email };
+    return { sha, tree: data.tree.sha, parents: data.parents.map((parent) => parent.sha) };
 }
 
-const BOT_EMAIL = /\[bot\]@users\.noreply\.github\.com$/;
-
-// publish always writes one commit, made through the API by the app, on the planned base.
-const isBotCommit = (head: BranchHead, base: string): boolean =>
-    head.parents.length === 1 && head.parents[0] === base && BOT_EMAIL.test(head.committer);
-
-// A rerun converges: the same tree on the same base keeps the branch as it is. A branch a person pushed to while
-// its pull request is open is theirs, so it is never reset.
-export function branchUpdate(head: BranchHead | undefined, base: string, tree: string, openPr: boolean): BranchUpdate {
+// A rerun converges: the same tree on the same base keeps the branch as it is. The open pull request's body records
+// the commit publish wrote, so a head that differs from it, or a body that records none, means someone else pushed,
+// and the branch is theirs.
+export function branchUpdate(head: BranchHead | undefined, recorded: string | undefined, base: string, tree: string, openPr: boolean): BranchUpdate {
     if (head === undefined) return 'created';
-    const ours = isBotCommit(head, base);
-    if (ours && head.tree === tree) return 'unchanged';
-    if (openPr && !ours) return 'kept';
-    return 'moved';
+    if (openPr && head.sha !== recorded) return 'kept';
+    return head.parents.length === 1 && head.parents[0] === base && head.tree === tree ? 'unchanged' : 'moved';
 }
 
-async function pointBranch(octokit: Octokit, repo: RepoRef, branch: string, update: BranchUpdate, base: string, tree: string, message: string): Promise<void> {
-    if (update === 'unchanged' || update === 'kept') return;
-    const { data: commit } = await octokit.rest.git.createCommit({ ...repo, message, tree, parents: [base] });
-    if (update === 'created') await octokit.rest.git.createRef({ ...repo, ref: `refs/heads/${branch}`, sha: commit.sha });
-    else await octokit.rest.git.updateRef({ ...repo, ref: `heads/${branch}`, sha: commit.sha, force: true });
+// The commit the branch points at once publish is done, or the one it recorded before when it kept the branch.
+async function pointBranch(
+    octokit: Octokit,
+    repo: RepoRef,
+    branch: string,
+    update: BranchUpdate,
+    head: BranchHead | undefined,
+    recorded: string | undefined,
+    commit: { base: string; tree: string; message: string },
+): Promise<string | undefined> {
+    if (update === 'kept') return recorded;
+    if (update === 'unchanged') return head?.sha;
+    const { data: created } = await octokit.rest.git.createCommit({ ...repo, message: commit.message, tree: commit.tree, parents: [commit.base] });
+    if (update === 'created') await octokit.rest.git.createRef({ ...repo, ref: `refs/heads/${branch}`, sha: created.sha });
+    else await octokit.rest.git.updateRef({ ...repo, ref: `heads/${branch}`, sha: created.sha, force: true });
+    return created.sha;
 }
 
 async function findOpenPr(octokit: Octokit, repo: RepoRef, branch: string) {
@@ -91,9 +95,11 @@ export async function publishPr(options: PublishOptions, planned: PlannedIssue, 
     const branch = branchName(planned.context.issue.shortId);
     const { tree, message } = await commitChanges(octokit, repo, planned, output, changes);
     const open = await findOpenPr(octokit, repo, branch);
-    const update = branchUpdate(await branchHead(octokit, repo, branch), planned.sha, tree, open !== undefined);
-    await pointBranch(octokit, repo, branch, update, planned.sha, tree, message);
-    const body = renderPrBody(planned, output, verification);
+    const recorded = markedCommit(open?.body);
+    const head = await branchHead(octokit, repo, branch);
+    const update = branchUpdate(head, recorded, planned.sha, tree, open !== undefined);
+    const commit = await pointBranch(octokit, repo, branch, update, head, recorded, { base: planned.sha, tree, message });
+    const body = renderPrBody(planned, output, verification, commit);
     let pr: { number: number; url: string; created: boolean };
     if (open !== undefined) {
         await octokit.rest.pulls.update({ ...repo, pull_number: open.number, ...(update === 'kept' ? {} : { title: output.commitTitle }), body });

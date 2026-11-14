@@ -14,10 +14,7 @@ export type FakePr = {
     files: string[];
 };
 
-export type FakeCommit = { message: string; tree: string; parents: string[]; committer: string };
-
-export const BOT = '1+sentry-fix[bot]@users.noreply.github.com';
-export const PERSON = 'dev@example.com';
+export type FakeCommit = { message: string; tree: string; parents: string[] };
 
 const notFound = () => Object.assign(new Error('Not Found'), { status: 404 });
 
@@ -32,7 +29,7 @@ export class FakeGitHub {
     refs = new Map<string, string>([['heads/main', 'a'.repeat(40)]]);
     blobs = new Map<string, string>();
     trees = new Map<string, { base: string | undefined; entries: Array<{ path: string; mode: string; sha: string | null }> }>();
-    commits = new Map<string, FakeCommit>([['a'.repeat(40), { message: 'base', tree: 't0', parents: [], committer: PERSON }]]);
+    commits = new Map<string, FakeCommit>([['a'.repeat(40), { message: 'base', tree: 't0', parents: [] }]]);
     compareCommits: string[] = [];
     calls: string[] = [];
 
@@ -148,9 +145,7 @@ export class FakeGitHub {
                 getCommit: async ({ commit_sha }: { commit_sha: string }) => {
                     const commit = this.commits.get(commit_sha);
                     if (commit === undefined) throw notFound();
-                    return {
-                        data: { sha: commit_sha, tree: { sha: commit.tree }, parents: commit.parents.map((sha) => ({ sha })), committer: { email: commit.committer } },
-                    };
+                    return { data: { sha: commit_sha, tree: { sha: commit.tree }, parents: commit.parents.map((sha) => ({ sha })) } };
                 },
                 createBlob: async ({ content }: { content: string }) => {
                     const sha = nextSha();
@@ -165,7 +160,7 @@ export class FakeGitHub {
                 },
                 createCommit: async ({ message, tree, parents }: { message: string; tree: string; parents: string[] }) => {
                     const sha = nextSha();
-                    this.commits.set(sha, { message, tree, parents, committer: BOT });
+                    this.commits.set(sha, { message, tree, parents });
                     return { data: { sha } };
                 },
                 getRef: async ({ ref }: { ref: string }) => {
