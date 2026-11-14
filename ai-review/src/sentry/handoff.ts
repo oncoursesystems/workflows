@@ -48,6 +48,20 @@ export const PlannedIssue = z.object({
     context: IssueContextData,
 }) satisfies z.ZodType<PlannedIssue>;
 
+// The publish job reads every planned issue from one environment variable, and Linux caps one at 128 KiB.
+export const PLAN_OUTPUT_LIMIT = 100_000;
+
+// Frames are the bulk of an issue, so every issue keeps fewer of them until the plan fits in one variable.
+export function fitPlan(planned: readonly PlannedIssue[], limit = PLAN_OUTPUT_LIMIT): PlannedIssue[] {
+    let frames = Math.max(0, ...planned.map((issue) => issue.context.frames.length));
+    for (;;) {
+        const fitted = planned.map((issue) => ({ ...issue, context: { ...issue.context, frames: issue.context.frames.slice(0, frames) } }));
+        if (JSON.stringify(fitted).length <= limit) return fitted;
+        if (frames === 0) throw new Error(`the plan is ${JSON.stringify(fitted).length} characters without frames, over the ${limit} limit; lower the limit`);
+        frames = Math.floor(frames / 2);
+    }
+}
+
 export type ChangedFile = Change & { content: string | null };
 
 const ChangedFileData = z.object({
@@ -69,15 +83,16 @@ const FixStatsData = z.object({
 
 const GateData = z.union([z.object({ open: z.literal(true) }), z.object({ open: z.literal(false), reasons: z.array(z.string()) })]) satisfies z.ZodType<Gate>;
 
+// Code in the fix job can rewrite this file, so it carries only what the fixer produced. The publish job takes
+// the issue, the project and the base commit from the plan job's output.
 export type FixResult =
-    | { status: 'failed'; planned: PlannedIssue; error: string }
-    | { status: 'done'; planned: PlannedIssue; output: FixOutput; gate: Gate; changes: ChangedFile[]; stats: FixStats };
+    | { status: 'failed'; error: string }
+    | { status: 'done'; output: FixOutput; gate: Gate; changes: ChangedFile[]; stats: FixStats };
 
 export const FixResult = z.discriminatedUnion('status', [
-    z.object({ status: z.literal('failed'), planned: PlannedIssue, error: z.string() }),
+    z.object({ status: z.literal('failed'), error: z.string() }),
     z.object({
         status: z.literal('done'),
-        planned: PlannedIssue,
         output: FixOutput,
         gate: GateData,
         changes: z.array(ChangedFileData),

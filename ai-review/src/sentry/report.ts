@@ -10,6 +10,9 @@ export const PERIOD_TEXT: Record<Period, string> = { '24h': '24 hours', '7d': '7
 
 const TITLE_LIMIT = 80;
 const NOTE_LIMIT = 9_000;
+// GitHub refuses a pull request body over 65,536 characters.
+const ANALYSIS_LIMIT = 40_000;
+const ROOT_CAUSE_LIMIT = 2_000;
 
 const clip = (text: string, limit: number): string => (text.length > limit ? `${text.slice(0, limit)}...` : text);
 
@@ -81,11 +84,11 @@ export function renderPrBody(planned: PlannedIssue, output: FixOutput): string {
         '',
         '### Root cause',
         '',
-        output.rootCause,
+        clip(output.rootCause, ROOT_CAUSE_LIMIT),
         '',
         '### Analysis',
         '',
-        output.analysis,
+        clip(output.analysis, ANALYSIS_LIMIT),
         '',
         '### Test',
         '',

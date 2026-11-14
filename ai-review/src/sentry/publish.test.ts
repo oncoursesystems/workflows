@@ -35,7 +35,6 @@ const file = (path: string, text: string | null, status: ChangedFile['status'] =
 
 const done = (fields: Partial<Extract<FixResult, { status: 'done' }>> = {}): FixResult => ({
     status: 'done',
-    planned,
     output,
     gate: { open: true },
     changes: [file('client/web/app/Grid.js', 'fixed();\n'), file('client/web/test/Grid.test.js', 'test();\n', 'added'), file('client/web/old.js', null, 'deleted')],
@@ -58,7 +57,7 @@ const setup = (notes: string[] = []) => {
 describe('publish', () => {
     it('commits through the API, opens a ready pull request with the label, and notes it on Sentry', async () => {
         const { github, posted, options } = setup();
-        const result = await publish(done(), options);
+        const result = await publish(planned, done(), options);
         expect(result).toEqual({ kind: 'pr', url: 'https://github.com/o/r/pull/101', created: true });
 
         const head = github.refs.get('heads/sentry-fix/oncourse-web-3k')!;
@@ -89,10 +88,10 @@ describe('publish', () => {
 
     it('converges on a rerun: the same branch, the same pull request, and no second note', async () => {
         const { github, posted, options } = setup();
-        await publish(done(), options);
+        await publish(planned, done(), options);
         const head = github.refs.get('heads/sentry-fix/oncourse-web-3k');
         github.calls = [];
-        const again = await publish(done(), options);
+        const again = await publish(planned, done(), options);
         expect(again).toEqual({ kind: 'pr', url: 'https://github.com/o/r/pull/101', created: false });
         expect(github.refs.get('heads/sentry-fix/oncourse-web-3k')).toBe(head);
         expect(github.calls).toEqual(['update #101', 'addLabels #101 sentry-autofix']);
@@ -104,7 +103,7 @@ describe('publish', () => {
         const { github, options } = setup();
         github.refs.set('heads/sentry-fix/oncourse-web-3k', 'a'.repeat(40));
         github.pr({ number: 50, state: 'closed', head: 'sentry-fix/oncourse-web-3k', labels: ['sentry-autofix'] });
-        await publish(done(), options);
+        await publish(planned, done(), options);
         expect(github.calls).toContain('updateRef heads/sentry-fix/oncourse-web-3k force');
         expect(github.calls).toContain('create sentry-fix/oncourse-web-3k -> main');
     });
@@ -112,7 +111,7 @@ describe('publish', () => {
     it('posts the analysis to Sentry and opens nothing when the fixer found no fix', async () => {
         const { github, posted, options } = setup();
         const noFix = done({ output: { ...output, outcome: 'no-fix', analysis: 'The error is raised by PL/SQL.' }, gate: { open: false, reasons: ['Claude found no confident fix.'] }, changes: [] });
-        expect(await publish(noFix, options)).toEqual({ kind: 'no-fix', reasons: ['Claude found no confident fix.', 'The working tree has no changes.'] });
+        expect(await publish(planned, noFix, options)).toEqual({ kind: 'no-fix', reasons: ['Claude found no confident fix.', 'The working tree has no changes.'] });
         expect(github.calls).toEqual([]);
         expect(posted[0]).toMatch(/^\[sentry-fix\] no-fix 2026-11-13\n/);
         expect(posted[0]).toContain('- Claude found no confident fix.');
@@ -122,7 +121,7 @@ describe('publish', () => {
     it('checks the gate again, so an artifact with a protected path opens nothing', async () => {
         const { github, posted, options } = setup();
         const tampered = done({ changes: [file('.github/workflows/ci.yml', 'evil')] });
-        expect(await publish(tampered, options)).toEqual({
+        expect(await publish(planned, tampered, options)).toEqual({
             kind: 'no-fix',
             reasons: ['`.github/workflows/ci.yml` is outside the project roots.', '`.github/workflows/ci.yml` is protected.'],
         });
@@ -132,13 +131,13 @@ describe('publish', () => {
 
     it('does not post the same no-fix note twice in a day', async () => {
         const { posted, options } = setup(['[sentry-fix] no-fix 2026-11-13\n\nearlier run']);
-        await publish(done({ output: { ...output, outcome: 'no-fix' } }), options);
+        await publish(planned, done({ output: { ...output, outcome: 'no-fix' } }), options);
         expect(posted).toEqual([]);
     });
 
     it('publishes nothing and notes nothing when the fixer did not finish', async () => {
         const { github, calls, options } = setup();
-        expect(await publish({ status: 'failed', planned, error: 'usage limit' }, options)).toEqual({
+        expect(await publish(planned, { status: 'failed', error: 'usage limit' }, options)).toEqual({
             kind: 'not-published',
             reason: 'the fixer did not finish: usage limit',
         });

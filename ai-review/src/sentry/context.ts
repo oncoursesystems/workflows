@@ -4,6 +4,7 @@ import type { SentryIssue } from './sentry.ts';
 export const MAX_FRAMES = 30;
 const MESSAGE_LIMIT = 2_000;
 const FIELD_LIMIT = 300;
+const TITLE_LIMIT = 300;
 
 export type Frame = { file: string | null; module: string | null; fn: string | null; line: number | null; inApp: boolean };
 
@@ -99,7 +100,7 @@ export function issueContext(issue: SentryIssue, event: unknown): IssueContext {
     const tag = (key: string) => body.tags?.find((t) => t.key === key)?.value ?? null;
     const thrownText = thrown ? [thrown.type, thrown.value].filter(Boolean).join(': ') : '';
     return {
-        issue,
+        issue: { ...issue, title: clip(issue.title, TITLE_LIMIT), culprit: clip(issue.culprit, FIELD_LIMIT) },
         message: clip(thrownText || message || issue.title, MESSAGE_LIMIT),
         frames: orderFrames(withFrames?.stacktrace?.frames ?? []),
         release: field(tag('release')),

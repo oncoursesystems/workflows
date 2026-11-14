@@ -80,9 +80,9 @@ export async function publishPr(options: PublishOptions, planned: PlannedIssue, 
     return pr;
 }
 
-export async function publish(result: FixResult, options: PublishOptions): Promise<Published> {
+export async function publish(planned: PlannedIssue, result: FixResult, options: PublishOptions): Promise<Published> {
     if (result.status === 'failed') return { kind: 'not-published', reason: `the fixer did not finish: ${result.error}` };
-    const { planned, output, changes } = result;
+    const { output, changes } = result;
     const issue = planned.context.issue;
     const project = projectOf(options.config, issue.project);
     if (project === undefined) return { kind: 'not-published', reason: `${issue.project} is no longer in the config` };

@@ -116,3 +116,11 @@ describe('issueContext', () => {
         });
     });
 });
+
+describe('issueContext limits', () => {
+    it('clips a long title and culprit', () => {
+        const context = issueContext(sentryIssue({ title: 'x'.repeat(5_000), culprit: 'y'.repeat(5_000) }), {});
+        expect(context.issue.title.length).toBeLessThan(400);
+        expect(context.issue.culprit.length).toBeLessThan(400);
+    });
+});

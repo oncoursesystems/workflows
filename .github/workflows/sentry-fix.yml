@@ -146,6 +146,7 @@ jobs:
       - name: Publish the results
         uses: oncoursesystems/workflows/.github/actions/sentry-fix-publish@main
         with:
+          issues: ${{ needs.plan.outputs.issues }}
           results-dir: ${{ runner.temp }}/sentry-fix
           bot-client-id: ${{ inputs.bot-client-id }}
           bot-app-private-key: ${{ secrets.bot-app-private-key }}

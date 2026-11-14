@@ -98,7 +98,8 @@ export function fixerSystemPrompt(project: ProjectConfig, rules: RepoRules): str
         `- Change files only under ${project.roots.map((root) => `\`${root}\``).join(', ')}. Never change .github/, ` +
             '.claude/, CLAUDE.md, AGENTS.md, REVIEW.md, review-policy.yml, CODEOWNERS, package manager config or lockfiles.',
         '- Do not commit, push or create branches. Leave the change in the working tree. The workflow commits it.',
-        '- Bash runs only `git diff`, `git status` and these project commands, exactly as written:',
+        '- Bash runs only `git diff`, `git status` and these project commands. Run each one exactly as written, ' +
+            'without cd, pipes or redirection, or it is denied:',
         commands,
         '- Answer no-fix when the root cause is not in this code, when the fix needs files outside those directories, ' +
             'or when you are not confident. A wrong fix costs a reviewer more than no fix.',

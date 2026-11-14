@@ -49,7 +49,7 @@ Sentry event text is attacker-controlled, because the browser DSN is public and 
 
 - **Allowlisted context.** Only the issue title, the culprit, the thrown exception, up to 30 frames, the release, the platform, and the transaction path without its query string leave Sentry. Request data, user context, breadcrumbs, cookies, headers, frame variables, and the extra and context blobs never do, because they can hold student data.
 - **Untrusted in the prompt.** The fixer gets the context inside `<untrusted_sentry_event>` and is told to treat it as data.
-- **Separate jobs.** The fix job holds only the Claude credentials. Its checkout keeps no credentials. The bot token and the Sentry token live in the publish job, on another runner, which never runs repository code and checks the gate again against the config on the default branch.
+- **Separate jobs.** The fix job holds only the Claude credentials. Its checkout keeps no credentials. The bot token and the Sentry token live in the publish job, on another runner, which never runs repository code. Code in the fix job can rewrite its result, so the publish job takes the issue, the project and the base commit from the plan job's output, and checks the gate again against the config on the default branch.
 - **Allowlisted env.** The fixer and the commands it runs get `PATH`, `HOME`, the locale, a few toolchain variables, the Claude auth variable, and the names in the project's `env`. Nothing that looks like a token, a key, a password, `GITHUB_*`, `ACTIONS_*`, `INPUT_*` or `RUNNER_*` gets through, even when the config lists it.
 - **Tools.** The fixer has `Read`, `Grep`, `Glob`, `Edit` and `Write`, with edits allowed only under the project roots, and `Bash` for `git diff`, `git status` and the project's exact commands. It has no web access.
 
@@ -67,7 +67,7 @@ The calling repository keeps its config at `.github/sentry-fix.yml` on the defau
 | `projects[].slug` | | Sentry project slug. |
 | `projects[].description` | | What code reports to the project. The fixer and Jev read it. |
 | `projects[].roots` | | Directories the fix may change, relative to the repository root. `.` is the whole repository. |
-| `projects[].commands` | `[]` | Exact commands the fixer may run to build and test, from the repository root. Write them so they need no `cd`, such as `npm --prefix client/web test`. |
+| `projects[].commands` | `[]` | Exact commands the fixer may run to build and test, from the repository root. Write them so they need no `cd`, such as `npm --prefix client/web test`. The checkout has no dependencies installed, so list the install command too, such as `npm --prefix client/web ci`. |
 | `projects[].env` | `[]` | Extra environment variable names the commands need, such as `NUGET_PACKAGES`. |
 | `apps[].name` | | App name the release step passes. |
 | `apps[].release` | | Sentry release name template with `{version}`, such as `OnCourse.Web@{version}`. |

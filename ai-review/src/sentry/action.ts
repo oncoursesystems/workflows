@@ -1,4 +1,4 @@
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
@@ -9,7 +9,8 @@ import { DEFAULT_CONFIG_PATH } from './config.ts';
 import { agentEnv, CLAUDE_AUTH_VARIABLE } from './env.ts';
 import { runFixer } from './fixer.ts';
 import { defaultBranchHead, requireConfig } from './github.ts';
-import { FixResult, parseJson, PlannedIssue, readJson } from './handoff.ts';
+import { z } from 'zod';
+import { fitPlan, FixResult, parseJson, PlannedIssue, readJson } from './handoff.ts';
 import { onMerged } from './merged.ts';
 import { plan } from './plan.ts';
 import { publish } from './publish.ts';
@@ -20,6 +21,9 @@ import type { SentryOptions } from './sentry.ts';
 // One entry point, so the composite actions share one install. Each step passes only the secrets its command needs.
 
 const RESULT_FILE = 'result.json';
+
+// The workflow uploads each fix job's result as this artifact, and download-artifact puts it in a directory of the same name.
+const artifactName = (issueId: string): string => `sentry-fix-${issueId}`;
 
 function sentryOptions(): SentryOptions {
     const token = core.getInput('sentry-token', { required: true });
@@ -48,7 +52,7 @@ async function planCommand(): Promise<void> {
     const table = renderWalk(result, config, dryRun);
     core.info(table);
     await core.summary.addRaw(table).write();
-    const planned = dryRun ? [] : result.planned;
+    const planned = dryRun ? [] : fitPlan(result.planned);
     core.setOutput('issues', JSON.stringify(planned));
     core.setOutput('count', String(planned.length));
     core.setOutput('sha', head.sha);
@@ -107,20 +111,24 @@ async function publishCommand(): Promise<void> {
     const head = await defaultBranchHead(octokit, context.repo);
     const config = await requireConfig(octokit, context.repo, head.branch, configPath());
     const dir = core.getInput('results-dir', { required: true });
-    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    const issues = parseJson(core.getInput('issues', { required: true }), z.array(PlannedIssue), 'the issues input');
     const lines: string[] = [];
     let failures = 0;
-    for (const entry of entries.filter((candidate) => candidate.isDirectory())) {
+    for (const planned of issues) {
+        const { id, shortId } = planned.context.issue;
+        const path = join(dir, artifactName(id), RESULT_FILE);
         try {
-            const result = await readJson(join(dir, entry.name, RESULT_FILE), FixResult);
-            const published = await publish(result, { octokit, repo: context.repo, sentry, config, now: new Date() });
-            const { shortId } = result.planned.context.issue;
+            if (!(await access(path).then(() => true, () => false))) {
+                lines.push(`- ${shortId}: not published, because the fix job left no result`);
+                continue;
+            }
+            const published = await publish(planned, await readJson(path, FixResult), { octokit, repo: context.repo, sentry, config, now: new Date() });
             if (published.kind === 'pr') lines.push(`- ${shortId}: ${published.created ? 'opened' : 'updated'} ${published.url}`);
             else if (published.kind === 'no-fix') lines.push(`- ${shortId}: no confident fix, noted on Sentry. ${published.reasons.join(' ')}`);
             else lines.push(`- ${shortId}: not published, because ${published.reason}`);
         } catch (error) {
             failures++;
-            core.error(`${entry.name}: ${error instanceof Error ? error.message : String(error)}`);
+            core.error(`${shortId}: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
     const summary = ['## Sentry fix results', '', ...(lines.length === 0 ? ['No fixer results.'] : lines), ''].join('\n');

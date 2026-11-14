@@ -108,12 +108,14 @@ projects:
     description: The ExtJS 7 single page app that teachers and administrators use.
     roots: [client/web]
     commands:
+      - npm --prefix client/web ci
       - npm --prefix client/web test
       - npm --prefix client/web run lint
   - slug: oncourse-mobile
     description: The mobile app.
     roots: [client/mobile]
     commands:
+      - npm --prefix client/mobile ci
       - npm --prefix client/mobile test
 apps:
   - name: web

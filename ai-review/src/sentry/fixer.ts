@@ -93,12 +93,12 @@ export async function runFixer(options: FixerOptions): Promise<FixResult> {
             env: options.env,
         });
     } catch (error) {
-        return { status: 'failed', planned, error: error instanceof Error ? error.message : String(error) };
+        return { status: 'failed', error: error instanceof Error ? error.message : String(error) };
     }
 
     const changes = await collectChanges(git, cwd, planned.sha);
     const texts = changes.flatMap((change) => (change.content === null ? [] : [{ path: change.path, text: Buffer.from(change.content, 'base64').toString('utf8') }]));
     const verdict = gate({ output: run.output, changes, project: planned.project, leaks: leakedIn(texts, options.secrets()) });
     const { billing, costUsd, turns, durationMs, denied } = run.stats;
-    return { status: 'done', planned, output: run.output, gate: verdict, changes, stats: { billing, costUsd, turns, durationMs, denied } };
+    return { status: 'done', output: run.output, gate: verdict, changes, stats: { billing, costUsd, turns, durationMs, denied } };
 }
