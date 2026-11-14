@@ -26,7 +26,6 @@ export type FixerOptions = {
     planned: PlannedIssue;
     cwd: string;
     runAgent: RunAgent;
-    // The agent session's environment, already reduced to an allowlist.
     env: Readonly<Record<string, string>>;
     secrets: () => readonly string[];
     git?: Git;

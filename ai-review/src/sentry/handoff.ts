@@ -95,10 +95,10 @@ export const FixStatsData = z.object({
 
 const GateData = z.union([z.object({ open: z.literal(true) }), z.object({ open: z.literal(false), reasons: z.array(z.string()) })]) satisfies z.ZodType<Gate>;
 
-// Code in the fix job can rewrite this file, so it carries only what the fixer produced. The publish job takes
-// the issue, the project and the base commit from the plan job's output.
-// failed is an infrastructure error, retried next week with no note. exhausted is the fixer running out of budget,
-// turns or time, which is a no-fix.
+// The fix job runs the agent on untrusted Sentry text, so this file carries only what the fixer produced. The
+// publish job takes the issue, the project and the base commit from the plan job's output.
+// failed is an infrastructure error, retried next week with no note. exhausted is the fixer running out of budget
+// or turns, which is a no-fix.
 export type FixResult =
     | { status: 'failed'; error: string }
     | { status: 'exhausted'; reason: string }

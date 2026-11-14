@@ -13,7 +13,6 @@ export type WalkRow = { issue: SentryIssue; decision: Decision; triage?: Triage 
 
 export type Judgement<T> = { decision: Decision; triage?: Triage; planned?: T };
 
-// Walk the ranking from the top and stop once `limit` issues are attempted, so skipped issues are backfilled.
 export async function walk<T>(
     issues: readonly SentryIssue[],
     limit: number,

@@ -22,7 +22,6 @@ const notFound = () => Object.assign(new Error('Not Found'), { status: 404 });
 let shaCounter = 0;
 const nextSha = (): string => (++shaCounter).toString(16).padStart(40, '0');
 
-// An in-memory repository with just the endpoints sentry-fix calls.
 export class FakeGitHub {
     prs: FakePr[] = [];
     repoLabels: string[] = [];
