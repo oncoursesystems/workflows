@@ -52,7 +52,6 @@ export function fenced(text: string): string {
     return `${fence}\n${text}\n${fence}`;
 }
 
-// commit is the commit publish pointed the branch at. It is undefined when someone else's commit is on the branch.
 export function renderPrBody(planned: PlannedIssue, output: FixOutput, commit: string | undefined): string {
     const { context } = planned;
     const { issue } = context;

@@ -1,11 +1,5 @@
 name: sentry-fix
 
-# Three jobs keep each secret where it is needed. plan reads Sentry and GitHub. fix holds only the Claude OAuth
-# token, and the fixer only reads and edits files, so it runs no repository code. publish holds the bot and
-# Sentry tokens. The worst a prompt-injected Sentry event can produce is a bad diff, and the gate, the protected
-# paths, the pull request's CI, ai-review and the CODEOWNERS review all stand in front of it. See the Security
-# section of docs/sentry-fix.md.
-
 on:
   workflow_call:
     inputs:

@@ -8,8 +8,6 @@ import type { IssueContext } from './context.ts';
 import type { Decision } from './eligibility.ts';
 import { pathsInFrames } from './frames.ts';
 
-// A wrong skip hides a real, frequent error for good, because the same evidence gets the same answer next week.
-// A wrong attempt costs one fixer run and ends in a no-fix note. So a skip needs a clear yes.
 export const NOT_IN_REPO_SKIP_AT = 0.8;
 export const FIXED_BY_OPEN_PR_SKIP_AT = 0.8;
 export const MAX_PRS_ASKED = 3;

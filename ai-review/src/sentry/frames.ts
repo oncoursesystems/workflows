@@ -13,7 +13,6 @@ export function normalizeFramePath(file: string): string {
         .join('/');
 }
 
-// Two trailing segments, such as gradebook/Grid.js, tell files apart well enough and survive any build prefix.
 const MATCHED_SEGMENTS = 2;
 
 export function framePathMatches(framePath: string, repoPath: string): boolean {

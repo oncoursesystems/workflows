@@ -49,7 +49,7 @@ Each Sentry note starts with a line the next run reads: `[sentry-fix] pr <url>`,
 
 ## Security
 
-Sentry event text is attacker-controlled, because the browser DSN is public and anyone can send an event. The fixer runs no repository code: it has no shell, so it can only read and edit files. A prompt injection in an event can therefore produce a bad diff and nothing else. The gate, the protected paths, the pull request's CI, ai-review and the `CODEOWNERS` review all stand in front of that diff, and a person merges it.
+Sentry event text is attacker-controlled, because the browser DSN is public and anyone can send an event. The fixer has no shell, so it can only read and edit files, and it runs no repository code. A prompt injection in an event can therefore produce a bad diff and nothing else. Before that diff merges, the gate checks it, the protected paths limit it, the pull request's CI builds and tests it, ai-review reviews it, and a `CODEOWNERS` reviewer approves it.
 
 The Claude OAuth token is held in the fix job only. The agent session gets it through an env allowlist: the paths, the locale, `CI` and the token. Nothing that looks like a GitHub, Sentry or Typesafe credential reaches it.
 

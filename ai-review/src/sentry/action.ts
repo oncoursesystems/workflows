@@ -16,7 +16,6 @@ import { allFailed, resolveRelease, type ResolveOutcome } from './release.ts';
 import { renderWalk } from './report.ts';
 import type { SentryOptions } from './sentry.ts';
 
-// One entry point, so the composite actions share one install. Each step passes only the secrets its command needs.
 
 const RESULT_FILE = 'result.json';
 

@@ -7,8 +7,6 @@ export const LABELS = {
 
 export const branchName = (shortId: string): string => `sentry-fix/${shortId.toLowerCase()}`;
 
-// The marker and the branch are written together by publish, so a pull request whose two disagree was edited by hand
-// or carries a forged marker.
 export const markerMatchesBranch = (headRef: string, shortId: string): boolean => headRef === branchName(shortId);
 
 export const issueMarker = (issueId: string): string => `<!-- sentry-issue: ${issueId} -->`;
@@ -22,10 +20,8 @@ const COMMIT_MARKER = /^<!-- sentry-fix-commit: ([0-9a-f]{40}) -->$/;
 const bodyLines = (body: string | null | undefined): string[] =>
     (body ?? '').split('\n').map((line) => line.trim()).filter((line) => line !== '');
 
-// Sentry and agent text in the body come before the marker, so only the last line counts.
 export const markedIssueId = (body: string | null | undefined): string | undefined => ISSUE_MARKER.exec(bodyLines(body).at(-1) ?? '')?.[1];
 
-// The commit publish last pointed the branch at, on the line directly above the issue marker.
 export const markedCommit = (body: string | null | undefined): string | undefined => {
     const lines = bodyLines(body);
     if (!ISSUE_MARKER.test(lines.at(-1) ?? '')) return undefined;
@@ -37,14 +33,11 @@ export const defang = (text: string): string => text.replaceAll('<!--', '<!-\u20
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// A short ID such as ONCOURSE-WEB-3K must not match inside ONCOURSE-WEB-3K7.
 export const mentionsShortId = (text: string, shortId: string): boolean =>
     new RegExp(`(?<![A-Za-z0-9-])${escapeRegExp(shortId)}(?![A-Za-z0-9])`, 'i').test(text);
 
 export const NOTE_PREFIX = '[sentry-fix]';
 
-// A no-fix note names the workflow run that posted it, so a rerun of that run on another day posts no second note.
-// Notes from before the run id have none.
 export type NoteMark = { kind: 'pr'; url: string } | { kind: 'no-fix'; date: string; run?: string } | { kind: 'merged'; url: string };
 
 export function renderNoteMark(mark: NoteMark): string {

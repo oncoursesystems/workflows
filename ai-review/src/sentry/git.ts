@@ -8,8 +8,6 @@ import type { ChangedFile } from './handoff.ts';
 
 export type Git = (args: readonly string[]) => string;
 
-// The fixer can write files git reads, so git on the runner sees no config but the checkout's own, which the
-// tamper check covers.
 export function gitEnv(source: Readonly<Record<string, string | undefined>>): Record<string, string> {
     return {
         ...(source['PATH'] === undefined ? {} : { PATH: source['PATH'] }),
@@ -43,7 +41,6 @@ export type StatusEntry = { kind: 'tracked'; path: string; status: Change['statu
 
 const WORKTREE_STATUS: Record<string, Change['status']> = { M: 'modified', T: 'modified', D: 'deleted' };
 
-// `git status --porcelain=v2 -z`. The index is read-only to the fixer, so every tracked change is in the work tree.
 export function parseStatus(raw: string): StatusEntry[] {
     const entries: StatusEntry[] = [];
     for (const record of raw.split('\0')) {
@@ -63,8 +60,6 @@ export function parseStatus(raw: string): StatusEntry[] {
 
 const statusOf = (git: Git): StatusEntry[] => parseStatus(git(['status', '--porcelain=v2', '-z', '--untracked-files=all', '--no-renames', '--ignore-submodules=all']));
 
-// Git reads a .gitattributes in every directory above a tracked file. The index is read-only to the fixer, so this set
-// of directories is fixed before it runs.
 export function attributePaths(tracked: readonly string[]): string[] {
     const dirs = new Set<string>(['.']);
     for (const path of tracked) {
@@ -89,7 +84,6 @@ async function fingerprint(path: string): Promise<string> {
 
 const GITLINK_MODE = '160000';
 
-// Submodule paths in the index, from `git ls-files -s -z`. A checkout leaves each one an empty directory.
 export function parseGitlinks(raw: string): string[] {
     return raw.split('\0').flatMap((record) => {
         const tab = record.indexOf('\t');
@@ -102,8 +96,6 @@ export type GitSnapshot = { fingerprints: Map<string, string>; untracked: Set<st
 const fingerprints = async (cwd: string, paths: readonly string[]): Promise<Map<string, string>> =>
     new Map(await Promise.all(paths.map(async (path) => [path, await fingerprint(join(cwd, path))] as const)));
 
-// The gitlink directories are in the fingerprints, so one the fixer filled, with a git dir or anything else, fails
-// the tamper check before git on the runner reads the tree.
 export async function snapshot(git: Git, cwd: string): Promise<GitSnapshot> {
     const tracked = git(['ls-files', '-z']).split('\0').filter((path) => path !== '');
     const gitlinks = parseGitlinks(git(['ls-files', '-s', '-z']));
@@ -112,7 +104,6 @@ export async function snapshot(git: Git, cwd: string): Promise<GitSnapshot> {
     return { fingerprints: await fingerprints(cwd, paths), untracked: new Set(untracked) };
 }
 
-// Run before any git call that could read a changed attribute or config, so a filter the fixer planted never runs.
 export async function tamperedPaths(cwd: string, before: GitSnapshot): Promise<string[]> {
     const after = await fingerprints(cwd, [...before.fingerprints.keys()]);
     return [...before.fingerprints].filter(([path, print]) => after.get(path) !== print).map(([path]) => path);
@@ -120,8 +111,6 @@ export async function tamperedPaths(cwd: string, before: GitSnapshot): Promise<s
 
 const FILE_MODE = (executable: boolean): string => (executable ? '100755' : '100644');
 
-// The file at path, read only when it is a regular file reached without a symlink, so a link cannot pull in /proc
-// or the runner's home.
 async function readRegular(cwd: string, path: string): Promise<{ mode: string; content: string | null }> {
     const full = join(cwd, path);
     const stats = await lstat(full);
@@ -132,8 +121,6 @@ async function readRegular(cwd: string, path: string): Promise<{ mode: string; c
     return { mode: FILE_MODE((stats.mode & 0o111) !== 0), content: (await readFile(full)).toString('base64') };
 }
 
-// Every tracked change counts, so the gate sees one outside the roots. An untracked path that was there before the
-// fixer ran, or that is new outside the roots, is build output the gate should not see.
 export async function collectChanges(git: Git, cwd: string, before: GitSnapshot, roots: readonly string[]): Promise<ChangedFile[]> {
     const changes: ChangedFile[] = [];
     for (const entry of statusOf(git)) {

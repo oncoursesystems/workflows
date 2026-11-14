@@ -8,8 +8,6 @@ const TITLE_LIMIT = 300;
 
 export type Frame = { file: string | null; module: string | null; fn: string | null; line: number | null; inApp: boolean };
 
-// Built only from allowlisted event fields. Request data, user context, breadcrumbs, cookies, headers,
-// query strings and the extra and context blobs can hold student data, so they never get here.
 export type IssueContext = {
     issue: SentryIssue;
     message: string;

@@ -57,16 +57,12 @@ async function branchHead(octokit: Octokit, repo: RepoRef, branch: string): Prom
     return { sha, tree: data.tree.sha, parents: data.parents.map((parent) => parent.sha) };
 }
 
-// A rerun converges: the same tree on the same base keeps the branch as it is. The open pull request's body records
-// the commit publish wrote, so a head that differs from it, or a body that records none, means someone else pushed,
-// and the branch is theirs.
 export function branchUpdate(head: BranchHead | undefined, recorded: string | undefined, base: string, tree: string, openPr: boolean): BranchUpdate {
     if (head === undefined) return 'created';
     if (openPr && head.sha !== recorded) return 'kept';
     return head.parents.length === 1 && head.parents[0] === base && head.tree === tree ? 'unchanged' : 'moved';
 }
 
-// The commit the branch points at once publish is done, or the one it recorded before when it kept the branch.
 async function pointBranch(
     octokit: Octokit,
     repo: RepoRef,
@@ -124,7 +120,6 @@ export async function publish(planned: PlannedIssue, result: FixResult, options:
     const project = projectOf(options.config, issue.project);
     if (project === undefined) return { kind: 'not-published', reason: `${issue.project} is no longer in the config` };
 
-    // The result file comes from the fix job, which holds the Claude token, so its verdict is checked again here against the config.
     const again = gate({ output, changes, project });
     const reasons = [...new Set([...(result.gate.open ? [] : result.gate.reasons), ...(again.open ? [] : again.reasons)])];
     if (reasons.length > 0) {

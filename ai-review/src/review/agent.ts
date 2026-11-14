@@ -43,7 +43,6 @@ export class UsageLimitError extends Error {
     override name = 'UsageLimitError';
 }
 
-// The session used up the turns or the budget the request gave it. Retrying the same request ends the same way.
 export class SessionLimitError extends Error {
     override name = 'SessionLimitError';
 }

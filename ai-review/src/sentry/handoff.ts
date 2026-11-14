@@ -7,7 +7,6 @@ import type { IssueContext } from './context.ts';
 import { FixOutput, type Change, type Gate } from './fix.ts';
 import type { SentryIssue } from './sentry.ts';
 
-// The jobs hand these to each other as JSON, so each side parses what it reads.
 
 const SentryIssueData = z.object({
     id: z.string(),
@@ -47,8 +46,6 @@ export const PlannedIssue = z.object({
     context: IssueContextData,
 }) satisfies z.ZodType<PlannedIssue>;
 
-// The plan reaches the fix and publish jobs as an artifact. Only its hash and the issue keys go through job
-// outputs, which GitHub keeps out of reach of the jobs that read them, so each reader checks the bytes it got.
 export const PLAN_FILE = 'plan.json';
 
 export type PlanKey = { id: string; shortId: string };
@@ -95,10 +92,6 @@ export const FixStatsData = z.object({
 
 const GateData = z.union([z.object({ open: z.literal(true) }), z.object({ open: z.literal(false), reasons: z.array(z.string()) })]) satisfies z.ZodType<Gate>;
 
-// The fix job runs the agent on untrusted Sentry text, so this file carries only what the fixer produced. The
-// publish job takes the issue, the project and the base commit from the plan job's output.
-// failed is an infrastructure error, retried next week with no note. exhausted is the fixer running out of budget
-// or turns, which is a no-fix.
 export type FixResult =
     | { status: 'failed'; error: string }
     | { status: 'exhausted'; reason: string }

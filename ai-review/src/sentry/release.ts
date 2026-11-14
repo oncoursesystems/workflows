@@ -43,8 +43,6 @@ export async function commitDate(octokit: Octokit, repo: RepoRef, ref: string): 
     return date === undefined ? undefined : new Date(date);
 }
 
-// The merged label is only a marker for people. A merge hook that never ran must not leave a fix unreleased.
-// A pull request merged after the tag's commit cannot be in the release, so it costs no pulls.get call.
 async function mergedFixes(octokit: Octokit, repo: RepoRef, tagDate: Date | undefined): Promise<MergedFix[]> {
     const items = await octokit.paginate(octokit.rest.issues.listForRepo, { ...repo, labels: LABELS.autofix.name, state: 'closed', per_page: 100 });
     const fixes: MergedFix[] = [];
@@ -82,7 +80,6 @@ async function resolveFix(options: ResolveOptions, app: AppConfig, release: stri
     return { ...outcome, status: 'resolved', reason: `resolved in ${release}` };
 }
 
-// One deleted issue or a Sentry outage must not cost the other fixes in the release their resolve.
 export async function resolveRelease(options: ResolveOptions): Promise<{ release: string; outcomes: ResolveOutcome[] }> {
     const { octokit, repo, config, input } = options;
     const release = releaseName(config, input);

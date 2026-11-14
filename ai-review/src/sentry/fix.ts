@@ -25,7 +25,6 @@ export const FixOutput = z.object({
 
 export type FixOutput = z.infer<typeof FixOutput>;
 
-// Files that same-repository pull request CI executes, with repository secrets, before anyone reviews the change.
 export const BUILD_FILES = [
     '**/package.json',
     '**/*.*proj',
