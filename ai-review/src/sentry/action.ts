@@ -122,8 +122,17 @@ async function publishCommand(): Promise<void> {
                 lines.push(`- ${shortId}: not published, because the fix job left no result`);
                 continue;
             }
-            const published = await publish(planned, await readJson(path, FixResult), { octokit, repo: context.repo, sentry, config, now: new Date() });
-            if (published.kind === 'pr') lines.push(`- ${shortId}: ${published.created ? 'opened' : 'updated'} ${published.url}`);
+            const published = await publish(planned, await readJson(path, FixResult), {
+                octokit,
+                repo: context.repo,
+                sentry,
+                config,
+                now: new Date(),
+                run: String(context.runId),
+            });
+            if (published.kind === 'pr' && published.branch === 'kept') {
+                lines.push(`- ${shortId}: updated the body of ${published.url}, and left its branch alone, because someone else pushed to it`);
+            } else if (published.kind === 'pr') lines.push(`- ${shortId}: ${published.created ? 'opened' : 'updated'} ${published.url}`);
             else if (published.kind === 'no-fix') lines.push(`- ${shortId}: no confident fix, noted on Sentry. ${published.reasons.join(' ')}`);
             else lines.push(`- ${shortId}: not published, because ${published.reason}`);
         } catch (error) {

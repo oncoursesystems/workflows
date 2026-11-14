@@ -14,6 +14,11 @@ export type FakePr = {
     files: string[];
 };
 
+export type FakeCommit = { message: string; tree: string; parents: string[]; committer: string };
+
+export const BOT = '1+sentry-fix[bot]@users.noreply.github.com';
+export const PERSON = 'dev@example.com';
+
 const notFound = () => Object.assign(new Error('Not Found'), { status: 404 });
 
 let shaCounter = 0;
@@ -27,7 +32,7 @@ export class FakeGitHub {
     refs = new Map<string, string>([['heads/main', 'a'.repeat(40)]]);
     blobs = new Map<string, string>();
     trees = new Map<string, { base: string | undefined; entries: Array<{ path: string; mode: string; sha: string | null }> }>();
-    commits = new Map<string, { message: string; tree: string; parents: string[] }>([['a'.repeat(40), { message: 'base', tree: 't0', parents: [] }]]);
+    commits = new Map<string, FakeCommit>([['a'.repeat(40), { message: 'base', tree: 't0', parents: [], committer: PERSON }]]);
     compareCommits: string[] = [];
     calls: string[] = [];
 
@@ -132,10 +137,10 @@ export class FakeGitHub {
                     const number = Math.max(100, ...this.prs.map((pr) => pr.number)) + 1;
                     return { data: this.prData(this.pr({ number, title, body, head, base })) };
                 },
-                update: async ({ pull_number, title, body }: { pull_number: number; title: string; body: string }) => {
+                update: async ({ pull_number, title, body }: { pull_number: number; title?: string; body: string }) => {
                     this.record(`update #${pull_number}`);
                     const pr = this.find(pull_number);
-                    Object.assign(pr, { title, body });
+                    Object.assign(pr, title === undefined ? { body } : { title, body });
                     return { data: this.prData(pr) };
                 },
             },
@@ -143,7 +148,9 @@ export class FakeGitHub {
                 getCommit: async ({ commit_sha }: { commit_sha: string }) => {
                     const commit = this.commits.get(commit_sha);
                     if (commit === undefined) throw notFound();
-                    return { data: { sha: commit_sha, tree: { sha: commit.tree }, parents: commit.parents.map((sha) => ({ sha })) } };
+                    return {
+                        data: { sha: commit_sha, tree: { sha: commit.tree }, parents: commit.parents.map((sha) => ({ sha })), committer: { email: commit.committer } },
+                    };
                 },
                 createBlob: async ({ content }: { content: string }) => {
                     const sha = nextSha();
@@ -158,7 +165,7 @@ export class FakeGitHub {
                 },
                 createCommit: async ({ message, tree, parents }: { message: string; tree: string; parents: string[] }) => {
                     const sha = nextSha();
-                    this.commits.set(sha, { message, tree, parents });
+                    this.commits.set(sha, { message, tree, parents, committer: BOT });
                     return { data: { sha } };
                 },
                 getRef: async ({ ref }: { ref: string }) => {

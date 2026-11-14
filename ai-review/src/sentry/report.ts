@@ -3,7 +3,7 @@ import type { Period, SentryFixConfig } from './config.ts';
 import { frameLine } from './context.ts';
 import type { FixOutput } from './fix.ts';
 import type { PlannedIssue } from './handoff.ts';
-import { defang, issueMarker, renderNoteMark } from './markers.ts';
+import { defang, issueMarker, renderNoteMark, type NoteMark } from './markers.ts';
 import type { Plan, WalkRow } from './plan.ts';
 
 export const PERIOD_TEXT: Record<Period, string> = { '24h': '24 hours', '7d': '7 days', '14d': '14 days' };
@@ -106,8 +106,8 @@ const note = (mark: string, lines: readonly string[]): string => clip([mark, '',
 export const prNote = (url: string, output: FixOutput): string =>
     note(renderNoteMark({ kind: 'pr', url }), [`Opened a fix: ${output.commitTitle}`, '', `Root cause: ${output.rootCause}`]);
 
-export function noFixNote(date: string, output: FixOutput, reasons: readonly string[]): string {
-    return note(renderNoteMark({ kind: 'no-fix', date }), [
+export function noFixNote(mark: Extract<NoteMark, { kind: 'no-fix' }>, output: FixOutput, reasons: readonly string[]): string {
+    return note(renderNoteMark(mark), [
         'sentry-fix found no confident fix, so it opened no pull request.',
         '',
         ...reasons.map((reason) => `- ${reason}`),

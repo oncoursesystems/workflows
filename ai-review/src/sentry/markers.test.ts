@@ -47,7 +47,7 @@ describe('a marker planted in Sentry or agent text', () => {
     });
 
     it('cannot open an HTML comment in a Sentry note', () => {
-        const note = noFixNote('2026-11-13', output, [`\`${planted}\` is outside the project roots.`]);
+        const note = noFixNote({ kind: 'no-fix', date: '2026-11-13', run: '1' }, output, [`\`${planted}\` is outside the project roots.`]);
         expect(note.split('\n').slice(1).join('\n')).not.toContain('<!--');
     });
 
@@ -72,6 +72,7 @@ describe('the Sentry note marks', () => {
     it.each([
         { kind: 'pr', url: 'https://github.com/o/r/pull/12' },
         { kind: 'no-fix', date: '2026-11-13' },
+        { kind: 'no-fix', date: '2026-11-13', run: '19283746' },
         { kind: 'merged', url: 'https://github.com/o/r/pull/12' },
     ] as const)('round-trips $kind through the first line of a note', (mark) => {
         expect(parseNoteMark(`${renderNoteMark(mark)}\n\nThe analysis.`)).toEqual(mark);
@@ -87,5 +88,17 @@ describe('the Sentry note marks', () => {
         expect(hasNote(notes, { kind: 'pr', url: 'https://github.com/o/r/pull/12' })).toBe(true);
         expect(hasNote(notes, { kind: 'pr', url: 'https://github.com/o/r/pull/13' })).toBe(false);
         expect(hasNote(notes, { kind: 'merged', url: 'https://github.com/o/r/pull/12' })).toBe(false);
+    });
+
+    it('keys a no-fix note by the run that posted it, whatever its date', () => {
+        expect(renderNoteMark({ kind: 'no-fix', date: '2026-11-13', run: '42' })).toBe('[sentry-fix] no-fix 2026-11-13 run 42');
+        const notes = ['[sentry-fix] no-fix 2026-11-13 run 42\n\nanalysis'];
+        expect(hasNote(notes, { kind: 'no-fix', date: '2026-11-15', run: '42' })).toBe(true);
+        expect(hasNote(notes, { kind: 'no-fix', date: '2026-11-13', run: '43' })).toBe(false);
+    });
+
+    it('still reads a no-fix note from before the run id', () => {
+        expect(parseNoteMark('[sentry-fix] no-fix 2026-11-06\n\nanalysis')).toEqual({ kind: 'no-fix', date: '2026-11-06' });
+        expect(hasNote(['[sentry-fix] no-fix 2026-11-06'], { kind: 'no-fix', date: '2026-11-06', run: '42' })).toBe(false);
     });
 });

@@ -31,32 +31,43 @@ export const mentionsShortId = (text: string, shortId: string): boolean =>
 
 export const NOTE_PREFIX = '[sentry-fix]';
 
-export type NoteMark = { kind: 'pr'; url: string } | { kind: 'no-fix'; date: string } | { kind: 'merged'; url: string };
+// A no-fix note names the workflow run that posted it, so a rerun of that run on another day posts no second note.
+// Notes from before the run id have none.
+export type NoteMark = { kind: 'pr'; url: string } | { kind: 'no-fix'; date: string; run?: string } | { kind: 'merged'; url: string };
 
 export function renderNoteMark(mark: NoteMark): string {
     switch (mark.kind) {
         case 'pr':
             return `${NOTE_PREFIX} pr ${mark.url}`;
         case 'no-fix':
-            return `${NOTE_PREFIX} no-fix ${mark.date}`;
+            return `${NOTE_PREFIX} no-fix ${mark.date}${mark.run === undefined ? '' : ` run ${mark.run}`}`;
         case 'merged':
             return `${NOTE_PREFIX} merged ${mark.url}`;
     }
 }
 
-const NOTE_MARK = /^\[sentry-fix\] (pr|no-fix|merged) (\S+)\s*$/;
+const NOTE_MARK = /^\[sentry-fix\] (?:(pr|merged) (\S+)|no-fix (\S+)(?: run (\d+))?)\s*$/;
 
 export function parseNoteMark(note: string): NoteMark | undefined {
     const match = NOTE_MARK.exec(note.split('\n', 1)[0] ?? '');
-    const [, kind, value = ''] = match ?? [];
-    if (kind === 'no-fix') return { kind, date: value };
-    if (kind === 'pr' || kind === 'merged') return { kind, url: value };
-    return undefined;
+    if (match === null) return undefined;
+    const [, kind, url = '', date = '', run] = match;
+    if (kind === 'pr' || kind === 'merged') return { kind, url };
+    return run === undefined ? { kind: 'no-fix', date } : { kind: 'no-fix', date, run };
 }
 
-export const hasNote = (notes: readonly string[], mark: NoteMark): boolean => {
-    const line = renderNoteMark(mark);
-    return notes.some((note) => note.split('\n', 1)[0]?.trim() === line);
+const sameNote = (found: NoteMark, wanted: NoteMark): boolean => {
+    if (found.kind === 'no-fix' && wanted.kind === 'no-fix') {
+        return wanted.run === undefined ? found.date === wanted.date && found.run === undefined : found.run === wanted.run;
+    }
+    if (found.kind === 'no-fix' || wanted.kind === 'no-fix') return false;
+    return found.kind === wanted.kind && found.url === wanted.url;
 };
+
+export const hasNote = (notes: readonly string[], mark: NoteMark): boolean =>
+    notes.some((note) => {
+        const found = parseNoteMark(note);
+        return found !== undefined && sameNote(found, mark);
+    });
 
 export const noteDate = (now: Date): string => now.toISOString().slice(0, 10);

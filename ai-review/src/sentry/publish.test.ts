@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SentryFixConfig } from './config.ts';
-import { FakeGitHub } from './fake-github.ts';
+import { FakeGitHub, PERSON } from './fake-github.ts';
 import type { FixOutput } from './fix.ts';
 import type { ChangedFile, FixResult, PlannedIssue } from './handoff.ts';
 import { publish } from './publish.ts';
@@ -50,7 +50,7 @@ const setup = (notes: string[] = []) => {
         posted.push((body as { text: string }).text);
         return {};
     });
-    const options = { octokit: github.octokit, repo: { owner: 'o', repo: 'r' }, sentry, config, now: new Date('2026-11-13T12:00:00Z') };
+    const options = { octokit: github.octokit, repo: { owner: 'o', repo: 'r' }, sentry, config, now: new Date('2026-11-13T12:00:00Z'), run: '777' };
     return { github, posted, calls, options };
 };
 
@@ -58,7 +58,7 @@ describe('publish', () => {
     it('commits through the API, opens a ready pull request with the label, and notes it on Sentry', async () => {
         const { github, posted, options } = setup();
         const result = await publish(planned, done(), options);
-        expect(result).toEqual({ kind: 'pr', url: 'https://github.com/o/r/pull/101', created: true });
+        expect(result).toEqual({ kind: 'pr', url: 'https://github.com/o/r/pull/101', created: true, branch: 'created' });
 
         const head = github.refs.get('heads/sentry-fix/oncourse-web-3k')!;
         const commit = github.commits.get(head)!;
@@ -92,7 +92,7 @@ describe('publish', () => {
         const head = github.refs.get('heads/sentry-fix/oncourse-web-3k');
         github.calls = [];
         const again = await publish(planned, done(), options);
-        expect(again).toEqual({ kind: 'pr', url: 'https://github.com/o/r/pull/101', created: false });
+        expect(again).toEqual({ kind: 'pr', url: 'https://github.com/o/r/pull/101', created: false, branch: 'unchanged' });
         expect(github.refs.get('heads/sentry-fix/oncourse-web-3k')).toBe(head);
         expect(github.calls).toEqual(['update #101', 'addLabels #101 sentry-autofix']);
         expect(github.prs).toHaveLength(1);
@@ -108,12 +108,35 @@ describe('publish', () => {
         expect(github.calls).toContain('create sentry-fix/oncourse-web-3k -> main');
     });
 
+    it('leaves the branch of an open pull request alone when a person pushed to it, and refreshes only the body', async () => {
+        const { github, options } = setup();
+        github.commits.set('f'.repeat(40), { message: 'fixup', tree: 't9', parents: ['a'.repeat(40)], committer: PERSON });
+        github.refs.set('heads/sentry-fix/oncourse-web-3k', 'f'.repeat(40));
+        github.pr({ number: 60, title: 'a reviewer title', body: 'old', head: 'sentry-fix/oncourse-web-3k', labels: ['sentry-autofix'] });
+        const result = await publish(planned, done(), options);
+        expect(result).toEqual({ kind: 'pr', url: 'https://github.com/o/r/pull/60', created: false, branch: 'kept' });
+        expect(github.refs.get('heads/sentry-fix/oncourse-web-3k')).toBe('f'.repeat(40));
+        expect(github.calls.filter((call) => call.startsWith('updateRef') || call.startsWith('createRef') || call.startsWith('create sentry'))).toEqual([]);
+        const pr = github.prs.find((candidate) => candidate.number === 60)!;
+        expect(pr.title).toBe('a reviewer title');
+        expect(pr.body).toContain('Fixes ONCOURSE-WEB-3K');
+    });
+
+    it('moves its own earlier commit on an open pull request to the new fix', async () => {
+        const { github, options } = setup();
+        await publish(planned, done(), options);
+        const first = github.refs.get('heads/sentry-fix/oncourse-web-3k');
+        const changed = done({ changes: [file('client/web/app/Grid.js', 'fixed better();\n')] });
+        expect(await publish(planned, changed, options)).toMatchObject({ kind: 'pr', created: false, branch: 'moved' });
+        expect(github.refs.get('heads/sentry-fix/oncourse-web-3k')).not.toBe(first);
+    });
+
     it('posts the analysis to Sentry and opens nothing when the fixer found no fix', async () => {
         const { github, posted, options } = setup();
         const noFix = done({ output: { ...output, outcome: 'no-fix', analysis: 'The error is raised by PL/SQL.' }, gate: { open: false, reasons: ['Claude found no confident fix.'] }, changes: [] });
         expect(await publish(planned, noFix, options)).toEqual({ kind: 'no-fix', reasons: ['Claude found no confident fix.', 'The working tree has no changes.'] });
         expect(github.calls).toEqual([]);
-        expect(posted[0]).toMatch(/^\[sentry-fix\] no-fix 2026-11-13\n/);
+        expect(posted[0]).toMatch(/^\[sentry-fix\] no-fix 2026-11-13 run 777\n/);
         expect(posted[0]).toContain('- Claude found no confident fix.');
         expect(posted[0]).toContain('The error is raised by PL/SQL.');
     });
@@ -129,8 +152,8 @@ describe('publish', () => {
         expect(posted).toHaveLength(1);
     });
 
-    it('does not post the same no-fix note twice in a day', async () => {
-        const { posted, options } = setup(['[sentry-fix] no-fix 2026-11-13\n\nearlier run']);
+    it('does not post a second no-fix note when the same run publishes again on another day', async () => {
+        const { posted, options } = setup(['[sentry-fix] no-fix 2026-11-12 run 777\n\nfirst attempt of this run']);
         await publish(planned, done({ output: { ...output, outcome: 'no-fix' } }), options);
         expect(posted).toEqual([]);
     });
