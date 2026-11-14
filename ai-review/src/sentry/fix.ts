@@ -28,7 +28,41 @@ export const FixOutput = z.object({
 
 export type FixOutput = z.infer<typeof FixOutput>;
 
-export const PROTECTED_PATHS = [
+// Files that same-repository pull request CI executes, with repository secrets, before anyone reviews the change.
+export const BUILD_FILES = [
+    '**/package.json',
+    '**/*.*proj',
+    '**/*.props',
+    '**/*.targets',
+    '**/Directory.Build.*',
+    '**/Directory.Packages.props',
+    '**/global.json',
+    '**/.config/dotnet-tools.json',
+    '**/*.sln',
+    '**/*.slnx',
+    '**/Dockerfile',
+    '**/Dockerfile.*',
+    '**/*.sh',
+    '**/webpack.config.*',
+    '**/webpack.*.js',
+    '**/vite.config.*',
+    '**/vitest.config.*',
+    '**/jest.config.*',
+    '**/karma.conf.*',
+    '**/.eslintrc',
+    '**/.eslintrc.*',
+    '**/eslint.config.*',
+    '**/.babelrc',
+    '**/.babelrc.*',
+    '**/babel.config.*',
+    '**/metro.config.*',
+    '**/tsconfig.json',
+    '**/tsconfig.*.json',
+    '**/app.json',
+    '**/app.config.*',
+];
+
+const POLICY_FILES = [
     '.github/**',
     '.claude/**',
     '**/CLAUDE.md',
@@ -52,7 +86,13 @@ export const PROTECTED_PATHS = [
     '**/go.sum',
 ];
 
+export const PROTECTED_PATHS = [...POLICY_FILES, ...BUILD_FILES];
+
 export const isProtected = picomatch(PROTECTED_PATHS, { dot: true, nocase: true });
+const isBuildFile = picomatch(BUILD_FILES, { dot: true, nocase: true });
+
+const protectedReason = (path: string): string =>
+    isBuildFile(path) ? `\`${path}\` is a build file, which pull request CI runs before review, so sentry-fix may not change it.` : `\`${path}\` is protected.`;
 
 export const insideRoots = (path: string, roots: readonly string[]): boolean =>
     roots.some((root) => root === '.' || path === root || path.startsWith(`${root}/`));
@@ -97,6 +137,9 @@ export function fixerSystemPrompt(project: ProjectConfig, rules: RepoRules): str
         'Rules:',
         `- Change files only under ${project.roots.map((root) => `\`${root}\``).join(', ')}. Never change .github/, ` +
             '.claude/, CLAUDE.md, AGENTS.md, REVIEW.md, review-policy.yml, CODEOWNERS, package manager config or lockfiles.',
+        '- Never change a build file: package.json, project and solution files, .props and .targets files, global.json, ' +
+            'dotnet-tools.json, Dockerfiles, shell scripts, or webpack, vite, jest, eslint, babel, metro, tsconfig or app ' +
+            'configs. When the fix needs one, answer no-fix and say which file and why.',
         '- Do not commit, push or create branches. Leave the change in the working tree. The workflow commits it.',
         '- Bash runs only `git diff`, `git status` and these project commands. Run each one exactly as written, ' +
             'without cd, pipes or redirection, or it is denied:',
@@ -158,7 +201,7 @@ export function gate({ output, changes, project, leaks = [] }: GateInput): Gate 
             .map((run) => `\`${run.command}\` is not one of the project commands.`),
         changes.length === 0 ? ['The working tree has no changes.'] : [],
         changes.filter((change) => !insideRoots(change.path, project.roots)).map((change) => `\`${change.path}\` is outside the project roots.`),
-        changes.filter((change) => isProtected(change.path)).map((change) => `\`${change.path}\` is protected.`),
+        changes.filter((change) => isProtected(change.path)).map((change) => protectedReason(change.path)),
         changes
             .filter((change) => change.status !== 'deleted' && !FILE_MODES.has(change.mode))
             .map((change) => `\`${change.path}\` is not a regular file.`),

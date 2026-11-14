@@ -95,6 +95,13 @@ describe('gate', () => {
             '`client/web/a.js` contains a credential the fixer could see.',
         ]);
     });
+
+    it('stays shut for a build file under a root, and says why', () => {
+        const paths = ['client/web/package.json', 'src/Web/Web.csproj', 'src/Directory.Build.props', 'client/web/webpack.config.js', 'build.sh'];
+        expect(reasonsOf({ output: fixed, changes: paths.map((path) => change(path)), project: { ...project, roots: ['.'] } })).toEqual(
+            paths.map((path) => `\`${path}\` is a build file, which pull request CI runs before review, so sentry-fix may not change it.`),
+        );
+    });
 });
 
 describe('isProtected', () => {
@@ -103,7 +110,39 @@ describe('isProtected', () => {
         (path) => expect(isProtected(path)).toBe(true),
     );
 
-    it.each(['client/web/app/Grid.js', 'src/Web/Github.cs', 'docs/ai-review.md'])('lets %s through', (path) => expect(isProtected(path)).toBe(false));
+    it.each([
+        'package.json',
+        'client/web/package.json',
+        'src/OnCourse.Web/OnCourse.Web.csproj',
+        'src/Tests/Tests.fsproj',
+        'src/Directory.Build.props',
+        'src/Directory.Build.targets',
+        'src/build/Custom.targets',
+        'global.json',
+        '.config/dotnet-tools.json',
+        'src/OnCourse.sln',
+        'src/OnCourse.slnx',
+        'Dockerfile',
+        'deploy/Dockerfile.web',
+        'scripts/release.sh',
+        'client/web/webpack.config.js',
+        'client/web/webpack.prod.js',
+        'client/web/vite.config.ts',
+        'client/web/.eslintrc.json',
+        'client/web/eslint.config.mjs',
+        'client/web/babel.config.js',
+        'client/web/.babelrc',
+        'client/mobile/metro.config.js',
+        'client/web/tsconfig.json',
+        'client/web/tsconfig.app.json',
+        'client/mobile/app.json',
+        'client/mobile/app.config.ts',
+    ])('protects the build file %s', (path) => expect(isProtected(path)).toBe(true));
+
+    it.each(['client/web/app/Grid.js', 'src/Web/Github.cs', 'docs/ai-review.md', 'client/web/app/package.js', 'src/Web/appsettings.json'])(
+        'lets %s through',
+        (path) => expect(isProtected(path)).toBe(false),
+    );
 });
 
 describe('leakedIn', () => {
