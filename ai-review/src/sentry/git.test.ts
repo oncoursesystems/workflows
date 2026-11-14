@@ -124,7 +124,7 @@ describe('the harness git calls', () => {
             mkdirSync(join(dir, 'client/web/ext'));
         });
 
-        // What code in the fixer's container can do, because the work tree around the gitlink is writable: make it a
+        // What the fixer can do with its file edits, because the work tree around the gitlink is writable: make it a
         // git repository with a clean filter in its own config, and a file whose stat no longer matches its index.
         const plantSubmodule = (marker: string) => {
             const sub = join(dir, 'client/web/ext');

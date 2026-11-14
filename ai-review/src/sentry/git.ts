@@ -8,8 +8,8 @@ import type { ChangedFile } from './handoff.ts';
 
 export type Git = (args: readonly string[]) => string;
 
-// Code the fixer ran can write files git reads, so git on the runner sees no config but the checkout's own, which
-// the container mounts read-only and the tamper check covers.
+// The fixer can write files git reads, so git on the runner sees no config but the checkout's own, which the
+// tamper check covers.
 export function gitEnv(source: Readonly<Record<string, string | undefined>>): Record<string, string> {
     return {
         ...(source['PATH'] === undefined ? {} : { PATH: source['PATH'] }),

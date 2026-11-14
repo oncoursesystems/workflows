@@ -9,8 +9,6 @@ projects:
   - slug: oncourse-dotnet
     description: The ASP.NET server
     roots: [src/, client/web]
-    commands: [dotnet test src/OnCourse.sln]
-    env: [NUGET_PACKAGES]
   - slug: oncourse-web
     description: The ExtJS client
     roots: [client/web]
@@ -41,14 +39,8 @@ describe('parseConfig', () => {
             environment: 'staging',
             period: '14d',
             projects: [
-                {
-                    slug: 'oncourse-dotnet',
-                    description: 'The ASP.NET server',
-                    roots: ['src', 'client/web'],
-                    commands: ['dotnet test src/OnCourse.sln'],
-                    env: ['NUGET_PACKAGES'],
-                },
-                { slug: 'oncourse-web', description: 'The ExtJS client', roots: ['client/web'], commands: [], env: [] },
+                { slug: 'oncourse-dotnet', description: 'The ASP.NET server', roots: ['src', 'client/web'] },
+                { slug: 'oncourse-web', description: 'The ExtJS client', roots: ['client/web'] },
             ],
             apps: [{ name: 'web', release: 'OnCourse.Web@{version}', projects: ['oncourse-dotnet', 'oncourse-web'] }],
         });
@@ -68,11 +60,6 @@ describe('parseConfig', () => {
         ['a glob', 'src/**'],
     ])('rejects %s', (_name, path) => {
         expect(errorOf(`projects:\n  - slug: p\n    description: d\n    roots: ["${path}"]\n`)).toContain('roots.0');
-    });
-
-    it('rejects an env name that looks like a credential', () => {
-        expect(errorOf(minimal('    env: [GITHUB_TOKEN]\n'))).toContain('credential');
-        expect(errorOf(minimal('    env: [MY_API_KEY]\n'))).toContain('credential');
     });
 
     it('rejects a project with no roots, and an unknown key', () => {

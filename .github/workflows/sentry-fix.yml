@@ -1,9 +1,10 @@
 name: sentry-fix
 
 # Three jobs keep each secret where it is needed. plan reads Sentry and GitHub. fix holds only the Claude OAuth
-# token, and runs the agent and the project commands in throwaway Docker containers, because those commands
-# execute repository code the fixer can change. publish holds the bot and Sentry tokens and runs none of that
-# code. See the Security section of docs/sentry-fix.md for what the containers isolate and what they do not.
+# token, and the fixer only reads and edits files, so it runs no repository code. publish holds the bot and
+# Sentry tokens. The worst a prompt-injected Sentry event can produce is a bad diff, and the gate, the protected
+# paths, the pull request's CI, ai-review and the CODEOWNERS review all stand in front of it. See the Security
+# section of docs/sentry-fix.md.
 
 on:
   workflow_call:
@@ -17,25 +18,9 @@ on:
         type: boolean
         default: false
       runs-on:
-        description: Runner label for every job. The fix job needs Docker with buildx on it.
+        description: Runner label for every job
         type: string
         default: linux
-      node-version:
-        description: Node.js version the project commands need, as a major or an exact version. Defaults to 24.
-        type: string
-        default: ''
-      dotnet-version:
-        description: .NET SDK image tag the project commands need, such as 10.0. Defaults to 10.0.
-        type: string
-        default: ''
-      global-json-file:
-        description: global.json in the checkout that names the .NET SDK the project commands need
-        type: string
-        default: ''
-      fix-image:
-        description: An image to run the fixer in instead of the one built from the sentry-fix-run Dockerfile
-        type: string
-        default: ''
       sentry-org:
         description: Sentry organization slug
         type: string
@@ -95,7 +80,7 @@ jobs:
     if: needs.plan.outputs.count != '' && needs.plan.outputs.count != '0'
     name: fix ${{ matrix.issue.shortId }}
     runs-on: ${{ inputs.runs-on }}
-    timeout-minutes: 120
+    timeout-minutes: 60
     permissions:
       contents: read
     strategy:
@@ -124,10 +109,6 @@ jobs:
           issue-id: ${{ matrix.issue.id }}
           out-dir: ${{ runner.temp }}/sentry-fix/${{ matrix.issue.id }}
           claude-code-oauth-token: ${{ secrets.claude-code-oauth-token }}
-          node-version: ${{ inputs.node-version }}
-          dotnet-version: ${{ inputs.dotnet-version }}
-          global-json-file: ${{ inputs.global-json-file }}
-          fix-image: ${{ inputs.fix-image }}
 
       - name: Keep the result for the publish job
         if: always()

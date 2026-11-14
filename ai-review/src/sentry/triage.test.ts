@@ -3,7 +3,7 @@ import { json, options, type Call } from '../jev/testing.ts';
 import { candidatePrs, pullRequestState, triage, type OpenPr } from './triage.ts';
 import { issueContextOf } from './testing.ts';
 
-const project = { slug: 'oncourse-web', description: 'The ExtJS client', roots: ['client/web'], commands: [], env: [] };
+const project = { slug: 'oncourse-web', description: 'The ExtJS client', roots: ['client/web'] };
 
 const answer = (noul: number) => json(200, { model: 'jev-1.14.0', answers: { answer: { type: 'noul', noul } }, usage: { input_tokens: 900 } });
 

@@ -36,8 +36,6 @@ const ProjectData = z.object({
     slug: z.string(),
     description: z.string(),
     roots: z.array(z.string()),
-    commands: z.array(z.string()),
-    env: z.array(z.string()),
 }) satisfies z.ZodType<ProjectConfig>;
 
 export type PlannedIssue = { sha: string; period: Period; project: ProjectConfig; context: IssueContext };
@@ -85,13 +83,6 @@ const ChangedFileData = z.object({
     content: z.string().nullable(),
 }) satisfies z.ZodType<ChangedFile>;
 
-// A project command the workflow ran itself after the agent finished. A null exit code means it did not finish.
-export type CommandRun = { command: string; exitCode: number | null; tail: string };
-
-export const CommandRunData = z.object({ command: z.string(), exitCode: z.number().int().nullable(), tail: z.string() }) satisfies z.ZodType<CommandRun>;
-
-export const passed = (run: CommandRun): boolean => run.exitCode === 0;
-
 export type FixStats = { billing: string; costUsd: number; turns: number; durationMs: number; denied: string[] };
 
 export const FixStatsData = z.object({
@@ -111,7 +102,7 @@ const GateData = z.union([z.object({ open: z.literal(true) }), z.object({ open: 
 export type FixResult =
     | { status: 'failed'; error: string }
     | { status: 'exhausted'; reason: string }
-    | { status: 'done'; output: FixOutput; verification: CommandRun[]; gate: Gate; changes: ChangedFile[]; stats: FixStats };
+    | { status: 'done'; output: FixOutput; gate: Gate; changes: ChangedFile[]; stats: FixStats };
 
 export const FixResult = z.discriminatedUnion('status', [
     z.object({ status: z.literal('failed'), error: z.string() }),
@@ -119,7 +110,6 @@ export const FixResult = z.discriminatedUnion('status', [
     z.object({
         status: z.literal('done'),
         output: FixOutput,
-        verification: z.array(CommandRunData),
         gate: GateData,
         changes: z.array(ChangedFileData),
         stats: FixStatsData,

@@ -7,7 +7,7 @@ import { sentryFixNotes } from './plan.ts';
 import { publish } from './publish.ts';
 import { fakeSentry, issueContextOf, sentryIssue, type SentryCall } from './testing.ts';
 
-const project = { slug: 'oncourse-web', description: 'client', roots: ['client/web'], commands: ['npm test'], env: [] };
+const project = { slug: 'oncourse-web', description: 'client', roots: ['client/web'] };
 const config: SentryFixConfig = { limit: 5, environment: 'production', period: '7d', projects: [project], apps: [] };
 
 const planned: PlannedIssue = {
@@ -24,7 +24,6 @@ const output: FixOutput = {
     analysis: 'Wait for the store.',
     commitTitle: 'fix(gradebook): wait for the period store',
     testAdded: 'client/web/test/Grid.test.js',
-    verification: [{ command: 'npm test', passed: true }],
 };
 
 const file = (path: string, text: string | null, status: ChangedFile['status'] = 'modified'): ChangedFile => ({
@@ -37,7 +36,6 @@ const file = (path: string, text: string | null, status: ChangedFile['status'] =
 const done = (fields: Partial<Extract<FixResult, { status: 'done' }>> = {}): FixResult => ({
     status: 'done',
     output,
-    verification: [{ command: 'npm test', exitCode: 0, tail: '12 passing' }],
     gate: { open: true },
     changes: [file('client/web/app/Grid.js', 'fixed();\n'), file('client/web/test/Grid.test.js', 'test();\n', 'added'), file('client/web/old.js', null, 'deleted')],
     stats: { billing: 'subscription', costUsd: 2, turns: 30, durationMs: 1, denied: [] },
@@ -80,14 +78,12 @@ describe('publish', () => {
         expect(pr.body).toContain('[ONCOURSE-WEB-3K](https://sentry.io/organizations/o/issues/101/) in `oncourse-web` had 1,234 events in the last 7 days.');
         expect(pr.body).toContain('Fixes ONCOURSE-WEB-3K');
         expect(pr.body).toContain('app/view/gradebook/Grid.js:42 in onLoad');
-        expect(pr.body).toContain('ran each project command once more, in a fresh container');
-        expect(pr.body).toContain('| `npm test` | passed |');
-        expect(pr.body).toContain("Claude's own report of its runs, which does not decide the gate");
+        expect(pr.body).toContain("The build and the tests are verified by this pull request's CI checks.");
         expect(pr.body).toContain('`client/web/test/Grid.test.js`');
         expect(pr.body.trimEnd().endsWith(`<!-- sentry-fix-commit: ${head} -->\n<!-- sentry-issue: 101 -->`)).toBe(true);
         expect(posted).toEqual([
             '[sentry-fix] pr https://github.com/o/r/pull/101\n\nOpened a fix: fix(gradebook): wait for the period store\n\n' +
-                'Root cause: The grid loads before the period store.\n\nThe workflow ran the project commands itself:\n\n- `npm test` passed\n',
+                'Root cause: The grid loads before the period store.',
         ]);
     });
 
@@ -164,18 +160,9 @@ describe('publish', () => {
         expect(posted[0]).toContain('The error is raised by PL/SQL.');
     });
 
-    it("notes the workflow's failed run with the tail of its output", async () => {
-        const { github, posted, options } = setup();
-        const failing = done({ verification: [{ command: 'npm test', exitCode: 1, tail: 'AssertionError: expected 2 to be 3' }], gate: { open: false, reasons: [] } });
-        expect(await publish(planned, failing, options)).toEqual({ kind: 'no-fix', reasons: ['`npm test` failed with exit code 1.'] });
-        expect(github.calls).toEqual([]);
-        expect(posted[0]).toContain('- `npm test` failed with exit code 1\n\n```\nAssertionError: expected 2 to be 3\n```');
-    });
-
-    it('checks the gate again, so a result whose runs were edited to pass opens nothing', async () => {
+    it('checks the gate again, so a result edited to open the gate for no changes opens nothing', async () => {
         const { github, options } = setup();
-        const edited = done({ verification: [], gate: { open: true } });
-        expect(await publish(planned, edited, options)).toEqual({ kind: 'no-fix', reasons: ['`npm test` did not run.'] });
+        expect(await publish(planned, done({ changes: [], gate: { open: true } }), options)).toEqual({ kind: 'no-fix', reasons: ['The working tree has no changes.'] });
         expect(github.calls).toEqual([]);
     });
 

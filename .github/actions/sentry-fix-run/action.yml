@@ -1,8 +1,7 @@
 name: Sentry fix run
 description: >
-  Run the Claude fixer on one planned Sentry issue inside a throwaway Docker container, check its change against
-  the gate, and write the result for the publish job. It holds no GitHub or Sentry token. The runner needs Docker
-  with buildx.
+  Run the Claude fixer on one planned Sentry issue, check its change against the gate, and write the result for
+  the publish job. The fixer only reads and edits files, and the action holds no GitHub or Sentry token.
 
 inputs:
   plan-file:
@@ -20,18 +19,6 @@ inputs:
   claude-code-oauth-token:
     description: Claude Code OAuth token the fixer runs on.
     required: true
-  node-version:
-    description: Node.js version the project commands need, as a major or an exact version. Defaults to 24.
-    required: false
-  dotnet-version:
-    description: .NET SDK image tag the project commands need, such as 10.0 or 10.0.100. Defaults to 10.0.
-    required: false
-  global-json-file:
-    description: global.json in the checkout that names the .NET SDK. Wins over dotnet-version.
-    required: false
-  fix-image:
-    description: An image to run the fixer in instead of building one from this action's Dockerfile.
-    required: false
 
 runs:
   using: composite
@@ -53,10 +40,5 @@ runs:
         INPUT_PLAN-SHA256: ${{ inputs.plan-sha256 }}
         INPUT_ISSUE-ID: ${{ inputs.issue-id }}
         INPUT_OUT-DIR: ${{ inputs.out-dir }}
-        INPUT_NODE-VERSION: ${{ inputs.node-version }}
-        INPUT_DOTNET-VERSION: ${{ inputs.dotnet-version }}
-        INPUT_GLOBAL-JSON-FILE: ${{ inputs.global-json-file }}
-        INPUT_FIX-IMAGE: ${{ inputs.fix-image }}
-        INPUT_DOCKERFILE: ${{ github.action_path }}/Dockerfile
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
       run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/sentry/action.ts"

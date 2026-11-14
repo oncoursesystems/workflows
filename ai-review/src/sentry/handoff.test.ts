@@ -5,7 +5,7 @@ import { issueContextOf, sentryIssue } from './testing.ts';
 const planned = (id: string, message: string): PlannedIssue => ({
     sha: 'a'.repeat(40),
     period: '7d',
-    project: { slug: 'p', description: 'd', roots: ['src'], commands: [], env: [] },
+    project: { slug: 'p', description: 'd', roots: ['src'] },
     context: issueContextOf(sentryIssue({ id, shortId: `S-${id}` }), {
         message,
         frames: Array.from({ length: 30 }, (_, i) => ({ file: `src/${'漢'.repeat(200)}${i}.js`, module: null, fn: 'fn', line: i, inApp: true })),

@@ -28,9 +28,7 @@ jobs:
       issues: read
     with:
       dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
-      runs-on: linux # the fix job needs Docker with buildx
-      node-version: "20"
-      global-json-file: global.json
+      runs-on: linux
       sentry-org: ${{ vars.SENTRY_ORG }}
       bot-client-id: ${{ vars.GH_APP_CLIENT_ID }}
     secrets:
@@ -99,22 +97,12 @@ projects:
   - slug: oncourse-dotnet
     description: The ASP.NET server and its services. Oracle access goes through PL/SQL packages in the database.
     roots: [src]
-    commands:
-      - dotnet build src/OnCourse.sln -m:2
-      - dotnet test src/OnCourse.Tests/OnCourse.Tests.csproj
   - slug: oncourse-web
     description: The ExtJS 7 single page app that teachers and administrators use.
     roots: [client/web]
-    commands:
-      - npm --prefix client/web ci
-      - npm --prefix client/web test
-      - npm --prefix client/web run lint
   - slug: oncourse-mobile
     description: The mobile app.
     roots: [client/mobile]
-    commands:
-      - npm --prefix client/mobile ci
-      - npm --prefix client/mobile test
 apps:
   - name: web
     release: OnCourse.Web@{version}

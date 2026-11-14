@@ -4,7 +4,7 @@ import { FakeGitHub } from './fake-github.ts';
 import { allFailed, commitsBetween, fixesInRange, releaseName, resolveRelease } from './release.ts';
 import { fakeSentry } from './testing.ts';
 
-const project = (slug: string) => ({ slug, description: slug, roots: ['src'], commands: [], env: [] });
+const project = (slug: string) => ({ slug, description: slug, roots: ['src'] });
 
 const config: SentryFixConfig = {
     limit: 5,

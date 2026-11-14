@@ -51,7 +51,7 @@ const config: SentryFixConfig = {
     limit: 2,
     environment: 'production',
     period: '7d',
-    projects: [{ slug: 'oncourse-web', description: 'The ExtJS client', roots: ['client/web'], commands: [], env: [] }],
+    projects: [{ slug: 'oncourse-web', description: 'The ExtJS client', roots: ['client/web'] }],
     apps: [],
 };
 

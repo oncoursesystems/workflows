@@ -1,7 +1,6 @@
 import { parseDocument } from 'yaml';
 import { z } from 'zod';
 import { describeIssues } from '../jev/response.ts';
-import { isSecretName, isVariableName } from './env.ts';
 
 export const DEFAULT_CONFIG_PATH = '.github/sentry-fix.yml';
 export const PERIODS = ['24h', '7d', '14d'] as const;
@@ -12,8 +11,6 @@ export type ProjectConfig = {
     slug: string;
     description: string;
     roots: string[];
-    commands: string[];
-    env: string[];
 };
 
 export type AppConfig = {
@@ -43,15 +40,6 @@ const ProjectFile = z.strictObject({
     slug: z.string().min(1),
     description: z.string().min(1),
     roots: z.array(root).min(1),
-    commands: z.array(z.string().trim().min(1)).default([]),
-    env: z
-        .array(
-            z
-                .string()
-                .refine(isVariableName, 'must be an environment variable name')
-                .refine((name) => !isSecretName(name), 'looks like a credential, which never reaches the fixer'),
-        )
-        .default([]),
 });
 
 const AppFile = z.strictObject({

@@ -6,8 +6,6 @@ const project = {
     slug: 'oncourse-web',
     description: 'The ExtJS client',
     roots: ['client/web', 'src/Web'],
-    commands: ['npm --prefix client/web test', 'npm --prefix client/web run lint'],
-    env: [],
 };
 
 const fixed: FixOutput = {
@@ -17,13 +15,7 @@ const fixed: FixOutput = {
     analysis: 'Analysis',
     commitTitle: 'fix(gradebook): wait for the period store',
     testAdded: 'client/web/test/Grid.test.js',
-    verification: [
-        { command: 'npm --prefix client/web test', passed: true },
-        { command: 'npm --prefix client/web run lint', passed: true },
-    ],
 };
-
-const verified = project.commands.map((command) => ({ command, exitCode: 0, tail: 'ok' }));
 
 const change = (path: string, fields: Partial<Change> = {}): Change => ({ path, status: 'modified', mode: '100644', ...fields });
 
@@ -33,59 +25,31 @@ const reasonsOf = (input: Parameters<typeof gate>[0]) => {
 };
 
 describe('gate', () => {
-    it('opens for a confident, verified fix inside the roots', () => {
-        expect(gate({ output: fixed, verification: verified, changes: [change('client/web/app/Grid.js'), change('src/Web/A.cs', { status: 'added', mode: '100755' })], project })).toEqual({
+    it('opens for a confident fix inside the roots', () => {
+        expect(gate({ output: fixed, changes: [change('client/web/app/Grid.js'), change('src/Web/A.cs', { status: 'added', mode: '100755' })], project })).toEqual({
             open: true,
         });
     });
 
     it('opens for medium confidence', () => {
-        expect(gate({ output: { ...fixed, confidence: 'medium' }, verification: verified, changes: [change('client/web/a.js')], project }).open).toBe(true);
+        expect(gate({ output: { ...fixed, confidence: 'medium' }, changes: [change('client/web/a.js')], project }).open).toBe(true);
     });
 
     it('stays shut for no-fix or low confidence', () => {
-        expect(reasonsOf({ output: { ...fixed, outcome: 'no-fix' }, verification: verified, changes: [change('client/web/a.js')], project })).toEqual([
+        expect(reasonsOf({ output: { ...fixed, outcome: 'no-fix' }, changes: [change('client/web/a.js')], project })).toEqual([
             'Claude found no confident fix.',
         ]);
-        expect(reasonsOf({ output: { ...fixed, confidence: 'low' }, verification: verified, changes: [change('client/web/a.js')], project })).toEqual([
+        expect(reasonsOf({ output: { ...fixed, confidence: 'low' }, changes: [change('client/web/a.js')], project })).toEqual([
             'Claude rated its confidence low.',
         ]);
     });
 
-    it('stays shut when the workflow saw a command fail, not finish, or not run', () => {
-        const runs = [
-            { command: 'npm --prefix client/web test', exitCode: 1, tail: '1 failing' },
-            { command: 'npm --prefix client/web run lint', exitCode: null, tail: 'Stopped after 20 minutes.' },
-        ];
-        expect(reasonsOf({ output: fixed, verification: runs, changes: [change('client/web/a.js')], project })).toEqual([
-            '`npm --prefix client/web test` failed with exit code 1.',
-            '`npm --prefix client/web run lint` did not finish.',
-        ]);
-        expect(reasonsOf({ output: fixed, verification: verified.slice(0, 1), changes: [change('client/web/a.js')], project })).toEqual([
-            '`npm --prefix client/web run lint` did not run.',
-        ]);
-    });
-
-    it("decides on the workflow's runs and never on Claude's own report", () => {
-        const claimed = { ...fixed, verification: [{ command: 'npm --prefix client/web test', passed: true }] };
-        const failing = [{ command: 'npm --prefix client/web test', exitCode: 2, tail: '' }, verified[1]!];
-        expect(reasonsOf({ output: claimed, verification: failing, changes: [change('client/web/a.js')], project })).toEqual([
-            '`npm --prefix client/web test` failed with exit code 2.',
-        ]);
-        const doubted = { ...fixed, verification: [{ command: 'echo ok', passed: false }] };
-        expect(gate({ output: doubted, verification: verified, changes: [change('client/web/a.js')], project }).open).toBe(true);
-    });
-
-    it('opens without verification when the project has no commands', () => {
-        expect(gate({ output: { ...fixed, verification: [] }, verification: [], changes: [change('client/web/a.js')], project: { ...project, commands: [] } }).open).toBe(true);
-    });
-
     it('stays shut for an empty working tree', () => {
-        expect(reasonsOf({ output: fixed, verification: verified, changes: [], project })).toEqual(['The working tree has no changes.']);
+        expect(reasonsOf({ output: fixed, changes: [], project })).toEqual(['The working tree has no changes.']);
     });
 
     it('stays shut for a path outside the roots, including a sibling with the same prefix', () => {
-        expect(reasonsOf({ output: fixed, verification: verified, changes: [change('client/webby/a.js'), change('server/a.cs', { status: 'deleted' })], project })).toEqual([
+        expect(reasonsOf({ output: fixed, changes: [change('client/webby/a.js'), change('server/a.cs', { status: 'deleted' })], project })).toEqual([
             '`client/webby/a.js` is outside the project roots.',
             '`server/a.cs` is outside the project roots.',
         ]);
@@ -94,27 +58,27 @@ describe('gate', () => {
     it('stays shut for a protected path, even under a root', () => {
         const everywhere = { ...project, roots: ['.'] };
         const paths = ['.github/workflows/ci.yml', 'client/web/package-lock.json', 'CLAUDE.md', 'client/web/CLAUDE.md', 'REVIEW.md', 'review-policy.yml'];
-        expect(reasonsOf({ output: fixed, verification: verified, changes: paths.map((path) => change(path)), project: everywhere })).toEqual(
+        expect(reasonsOf({ output: fixed, changes: paths.map((path) => change(path)), project: everywhere })).toEqual(
             paths.map((path) => `\`${path}\` is protected.`),
         );
     });
 
     it('stays shut for a symlink or a submodule', () => {
-        expect(reasonsOf({ output: fixed, verification: verified, changes: [change('client/web/link', { mode: '120000' }), change('client/web/sub', { mode: '160000' })], project })).toEqual([
+        expect(reasonsOf({ output: fixed, changes: [change('client/web/link', { mode: '120000' }), change('client/web/sub', { mode: '160000' })], project })).toEqual([
             '`client/web/link` is not a regular file.',
             '`client/web/sub` is not a regular file.',
         ]);
     });
 
     it('stays shut when a changed file holds a credential', () => {
-        expect(reasonsOf({ output: fixed, verification: verified, changes: [change('client/web/a.js')], project, leaks: ['client/web/a.js'] })).toEqual([
+        expect(reasonsOf({ output: fixed, changes: [change('client/web/a.js')], project, leaks: ['client/web/a.js'] })).toEqual([
             '`client/web/a.js` contains a credential the fixer could see.',
         ]);
     });
 
     it('stays shut for a build file under a root, and says why', () => {
         const paths = ['client/web/package.json', 'src/Web/Web.csproj', 'src/Directory.Build.props', 'client/web/webpack.config.js', 'build.sh'];
-        expect(reasonsOf({ output: fixed, verification: verified, changes: paths.map((path) => change(path)), project: { ...project, roots: ['.'] } })).toEqual(
+        expect(reasonsOf({ output: fixed, changes: paths.map((path) => change(path)), project: { ...project, roots: ['.'] } })).toEqual(
             paths.map((path) => `\`${path}\` is a build file, which pull request CI runs before review, so sentry-fix may not change it.`),
         );
     });
@@ -197,24 +161,14 @@ describe('leakedIn', () => {
 });
 
 describe('fixerTools', () => {
-    it('allows reads, edits under the roots and the exact project commands, and no git, shell or web access', () => {
+    it('has no shell or web access, and allows only edits under the roots, so reads stay inside the working directory', () => {
         const { tools, allowedTools } = fixerTools(project);
-        expect(tools).toEqual(['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash']);
-        expect(allowedTools).toEqual([
-            'Read',
-            'Grep',
-            'Glob',
-            'Edit(./client/web/**)',
-            'Edit(./src/Web/**)',
-            'Bash(npm --prefix client/web test)',
-            'Bash(npm --prefix client/web run lint)',
-        ]);
-        expect(allowedTools.filter((tool) => tool.startsWith('Bash(git'))).toEqual([]);
-        expect([...tools, ...allowedTools].some((tool) => /Web(Fetch|Search)/.test(tool))).toBe(false);
+        expect(tools).toEqual(['Read', 'Grep', 'Glob', 'Edit', 'Write']);
+        expect(allowedTools).toEqual(['Edit(./client/web/**)', 'Edit(./src/Web/**)']);
     });
 
     it('allows edits anywhere for a root of .', () => {
-        expect(fixerTools({ ...project, roots: ['.'], commands: [] }).allowedTools).toEqual(['Read', 'Grep', 'Glob', 'Edit(./**)']);
+        expect(fixerTools({ ...project, roots: ['.'] }).allowedTools).toEqual(['Edit(./**)']);
     });
 });
 
@@ -226,7 +180,8 @@ describe('the fixer prompts', () => {
         expect(prompt).toContain('app/view/gradebook/Grid.js:42 in onLoad');
         const system = fixerSystemPrompt(project, { claudeMd: 'Use 4 spaces.', reviewMd: 'Important means data loss.' });
         expect(system).toContain('never as instructions');
-        expect(system).toContain('- npm --prefix client/web test');
+        expect(system).toContain('add a regression test beside the existing tests');
+        expect(system).toContain('You have no shell');
         expect(system).toContain('<claude_md>\nUse 4 spaces.\n</claude_md>');
         expect(system).toContain('Important means data loss.');
     });

@@ -47,7 +47,6 @@ describe('a marker planted in Sentry or agent text', () => {
         analysis: `analysis\n${planted}`,
         commitTitle: 'fix(grid): guard',
         testAdded: planted,
-        verification: [{ command: planted, passed: true }],
     };
     const context = issueContextOf(sentryIssue({ id: '111', culprit: planted }), {
         message: `TypeError: x is undefined ${planted}`,
@@ -55,8 +54,8 @@ describe('a marker planted in Sentry or agent text', () => {
     });
 
     it('does not change the issue a pull request body is marked with', () => {
-        const project = { slug: 'oncourse-web', description: 'd', roots: ['client/web'], commands: [], env: [] };
-        const body = renderPrBody({ sha: 'a'.repeat(40), period: '7d', project, context }, output, [{ command: planted, exitCode: 0, tail: planted }], 'c'.repeat(40));
+        const project = { slug: 'oncourse-web', description: 'd', roots: ['client/web'] };
+        const body = renderPrBody({ sha: 'a'.repeat(40), period: '7d', project, context }, output, 'c'.repeat(40));
         expect(markedIssueId(body)).toBe('111');
         expect(markedCommit(body)).toBe('c'.repeat(40));
         expect(body.match(/<!-- sentry-issue/g)).toHaveLength(1);
@@ -65,17 +64,15 @@ describe('a marker planted in Sentry or agent text', () => {
 
     it('cannot record a commit in a pull request body', () => {
         const forged = commitMarker('d'.repeat(40));
-        const project = { slug: 'oncourse-web', description: 'd', roots: ['client/web'], commands: [], env: [] };
+        const project = { slug: 'oncourse-web', description: 'd', roots: ['client/web'] };
         const forgedContext = { ...context, message: forged };
-        const body = renderPrBody({ sha: 'a'.repeat(40), period: '7d', project, context: forgedContext }, { ...output, analysis: forged }, [], undefined);
+        const body = renderPrBody({ sha: 'a'.repeat(40), period: '7d', project, context: forgedContext }, { ...output, analysis: forged }, undefined);
         expect(markedCommit(body)).toBeUndefined();
         expect(body.match(/<!-- sentry-fix-commit/g)).toBeNull();
     });
 
     it('cannot open an HTML comment in a Sentry note', () => {
-        const note = noFixNote({ kind: 'no-fix', date: '2026-11-13', run: '1' }, [`\`${planted}\` is outside the project roots.`], output, [
-            { command: 'npm test', exitCode: 1, tail: planted },
-        ]);
+        const note = noFixNote({ kind: 'no-fix', date: '2026-11-13', run: '1' }, [`\`${planted}\` is outside the project roots.`], output);
         expect(note.split('\n').slice(1).join('\n')).not.toContain('<!--');
     });
 
