@@ -7,6 +7,10 @@ on:
         description: Path of the sentry-fix config, read from the default branch
         type: string
         default: .github/sentry-fix.yml
+      limit:
+        description: Issues to attempt, from 1 to 20. Empty uses the config's limit
+        type: string
+        default: ''
       dry-run:
         description: Print the walk to the job summary, and run no fixer, open no pull request and post no note
         type: boolean
@@ -57,6 +61,7 @@ jobs:
           sentry-org: ${{ inputs.sentry-org }}
           typesafe-api-key: ${{ secrets.typesafe-api-key }}
           config-path: ${{ inputs.config-path }}
+          limit: ${{ inputs.limit }}
           dry-run: ${{ inputs.dry-run }}
           plan-dir: ${{ runner.temp }}/sentry-fix-plan
 

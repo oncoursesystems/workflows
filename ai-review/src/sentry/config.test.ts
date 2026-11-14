@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appOf, parseConfig, renderRelease } from './config.ts';
+import { appOf, parseConfig, renderRelease, withLimit } from './config.ts';
 
 const FULL = `
 limit: 3
@@ -87,5 +87,27 @@ describe('renderRelease', () => {
     it('puts the version into the template', () => {
         const app = appOf(configOf(FULL), 'web');
         expect(app && renderRelease(app, '2026.11.13.1200')).toBe('OnCourse.Web@2026.11.13.1200');
+    });
+});
+
+describe('withLimit', () => {
+    const parsed = parseConfig('limit: 5\nprojects:\n  - slug: web\n    description: The web app.\n    roots: [src]\n');
+    if (!parsed.ok) throw new Error(parsed.error);
+    const { config } = parsed;
+
+    it('keeps the config limit when the input is empty', () => {
+        expect(withLimit(config, '').limit).toBe(5);
+        expect(withLimit(config, ' ').limit).toBe(5);
+    });
+
+    it('replaces the config limit with the input', () => {
+        expect(withLimit(config, '1').limit).toBe(1);
+        expect(withLimit(config, '20').limit).toBe(20);
+    });
+
+    it('rejects a limit outside 1 to 20 or one that is not a whole number', () => {
+        for (const input of ['0', '21', '2.5', 'two']) {
+            expect(() => withLimit(config, input)).toThrow(`limit must be a whole number from 1 to 20, not ${input}`);
+        }
     });
 });

@@ -10,6 +10,9 @@ on:
     - cron: "0 11 * * 1" # Mondays at 11:00 UTC
   workflow_dispatch:
     inputs:
+      limit:
+        description: Issues to attempt, from 1 to 20. Empty uses the config's limit
+        type: string
       dry-run:
         description: Print the walk only, and run no fixer
         type: boolean
@@ -27,6 +30,7 @@ jobs:
       pull-requests: read
       issues: read
     with:
+      limit: ${{ inputs.limit }}
       dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
       runs-on: linux
       sentry-org: ${{ vars.SENTRY_ORG }}
