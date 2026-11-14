@@ -3,8 +3,8 @@ import { ensureLabels } from '../github/labels.ts';
 import { projectOf, type SentryFixConfig } from './config.ts';
 import { gate, type FixOutput } from './fix.ts';
 import type { ChangedFile, FixResult, PlannedIssue } from './handoff.ts';
-import { hasNote, LABELS, noteDate, type NoteMark } from './markers.ts';
-import { branchName, noFixNote, prNote, renderPrBody } from './report.ts';
+import { branchName, hasNote, LABELS, noteDate, type NoteMark } from './markers.ts';
+import { noFixNote, prNote, renderPrBody } from './report.ts';
 import { listNotes, postNote, type SentryOptions } from './sentry.ts';
 
 export type PublishOptions = {

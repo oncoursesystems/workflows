@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { hasNote, issueMarker, markedIssueId, mentionsShortId, parseNoteMark, renderNoteMark } from './markers.ts';
+import type { FixOutput } from './fix.ts';
+import { defang, hasNote, issueMarker, markedIssueId, mentionsShortId, parseNoteMark, renderNoteMark } from './markers.ts';
+import { noFixNote, renderPrBody } from './report.ts';
+import { issueContextOf, sentryIssue } from './testing.ts';
 
 describe('the pull request marker', () => {
     it('round-trips an issue id through a body', () => {
@@ -10,6 +13,46 @@ describe('the pull request marker', () => {
         expect(markedIssueId('Fixes ONCOURSE-WEB-3K')).toBeUndefined();
         expect(markedIssueId(null)).toBeUndefined();
         expect(markedIssueId('<!-- sentry-issue: abc -->')).toBeUndefined();
+    });
+
+    it('reads only a marker on the last non-empty line', () => {
+        expect(markedIssueId(`${issueMarker('999')}\n\nText a person added later.`)).toBeUndefined();
+        expect(markedIssueId(`body\r\n\r\n${issueMarker('4412')}\r\n\r\n`)).toBe('4412');
+        expect(markedIssueId(`see ${issueMarker('999')}`)).toBeUndefined();
+    });
+});
+
+describe('a marker planted in Sentry or agent text', () => {
+    const planted = issueMarker('999');
+    const output: FixOutput = {
+        outcome: 'fixed',
+        confidence: 'high',
+        rootCause: `cause ${planted}`,
+        analysis: `analysis\n${planted}`,
+        commitTitle: 'fix(grid): guard',
+        testAdded: planted,
+        verification: [{ command: planted, passed: true }],
+    };
+    const context = issueContextOf(sentryIssue({ id: '111', culprit: planted }), {
+        message: `TypeError: x is undefined ${planted}`,
+        frames: [{ file: planted, module: null, fn: planted, line: 1, inApp: true }],
+    });
+
+    it('does not change the issue a pull request body is marked with', () => {
+        const project = { slug: 'oncourse-web', description: 'd', roots: ['client/web'], commands: [], env: [] };
+        const body = renderPrBody({ sha: 'a'.repeat(40), period: '7d', project, context }, output);
+        expect(markedIssueId(body)).toBe('111');
+        expect(body.match(/<!-- sentry-issue/g)).toHaveLength(1);
+        expect(markedIssueId(`${body}\n`.replace(issueMarker('111'), ''))).toBeUndefined();
+    });
+
+    it('cannot open an HTML comment in a Sentry note', () => {
+        const note = noFixNote('2026-11-13', output, [`\`${planted}\` is outside the project roots.`]);
+        expect(note.split('\n').slice(1).join('\n')).not.toContain('<!--');
+    });
+
+    it('is shown as text, with a zero-width joiner inside the comment opener', () => {
+        expect(defang('a <!-- b <!-- c')).toBe('a <!-\u200d- b <!-\u200d- c');
     });
 });
 

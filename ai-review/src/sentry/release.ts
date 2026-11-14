@@ -1,7 +1,7 @@
 import type { Octokit, RepoRef } from '../github/client.ts';
 import { applyLabelChange, ensureLabels } from '../github/labels.ts';
 import { appOf, renderRelease, type SentryFixConfig } from './config.ts';
-import { LABELS, markedIssueId } from './markers.ts';
+import { LABELS, markedIssueId, markerMatchesBranch } from './markers.ts';
 import { fetchIssue, resolveInRelease, type SentryOptions } from './sentry.ts';
 
 export type ReleaseInput = { app: string; version: string; release: string; tag: string; previousTag: string };
@@ -31,7 +31,7 @@ export async function commitsBetween(octokit: Octokit, repo: RepoRef, previousTa
     }
 }
 
-export type MergedFix = { number: number; mergeCommitSha: string | null; issueId: string };
+export type MergedFix = { number: number; mergeCommitSha: string | null; issueId: string; headRef: string };
 
 export const fixesInRange = (fixes: readonly MergedFix[], shas: ReadonlySet<string>): MergedFix[] =>
     fixes.filter((fix) => fix.mergeCommitSha !== null && shas.has(fix.mergeCommitSha));
@@ -43,12 +43,12 @@ async function mergedFixes(octokit: Octokit, repo: RepoRef): Promise<MergedFix[]
         const issueId = markedIssueId(item.body);
         if (item.pull_request === undefined || issueId === undefined) continue;
         const { data: pr } = await octokit.rest.pulls.get({ ...repo, pull_number: item.number });
-        fixes.push({ number: item.number, mergeCommitSha: pr.merged ? pr.merge_commit_sha : null, issueId });
+        fixes.push({ number: item.number, mergeCommitSha: pr.merged ? pr.merge_commit_sha : null, issueId, headRef: pr.head.ref });
     }
     return fixes;
 }
 
-export type ResolveOutcome = { number: number; issueId: string; shortId: string; resolved: boolean; reason: string };
+export type ResolveOutcome = { number: number; issueId: string; shortId: string; resolved: boolean; reason: string; warning?: boolean };
 
 export type ResolveOptions = { octokit: Octokit; repo: RepoRef; sentry: SentryOptions; config: SentryFixConfig; input: ReleaseInput };
 
@@ -61,13 +61,18 @@ export async function resolveRelease(options: ResolveOptions): Promise<{ release
     if (shipped.length > 0) await ensureLabels(octokit, repo, [LABELS.released]);
     for (const fix of shipped) {
         const issue = await fetchIssue(sentry, fix.issueId);
+        const outcome = { number: fix.number, issueId: fix.issueId, shortId: issue.shortId };
+        if (!markerMatchesBranch(fix.headRef, issue.shortId)) {
+            outcomes.push({ ...outcome, resolved: false, warning: true, reason: `skipped, because its marker names ${issue.shortId} but its branch is ${fix.headRef}` });
+            continue;
+        }
         if (!app.projects.includes(issue.project)) {
-            outcomes.push({ ...fix, shortId: issue.shortId, resolved: false, reason: `${issue.project} does not report ${app.name}` });
+            outcomes.push({ ...outcome, resolved: false, reason: `${issue.project} does not report ${app.name}` });
             continue;
         }
         await resolveInRelease(sentry, fix.issueId, release);
         await applyLabelChange(octokit, repo, fix.number, { add: [LABELS.released.name], remove: [LABELS.merged.name] });
-        outcomes.push({ number: fix.number, issueId: fix.issueId, shortId: issue.shortId, resolved: true, reason: `resolved in ${release}` });
+        outcomes.push({ ...outcome, resolved: true, reason: `resolved in ${release}` });
     }
     return { release, outcomes };
 }

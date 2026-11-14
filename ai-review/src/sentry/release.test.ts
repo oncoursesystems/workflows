@@ -37,9 +37,9 @@ describe('releaseName', () => {
 describe('fixesInRange', () => {
     it('keeps the fixes whose merge commit is in the release range', () => {
         const fixes = [
-            { number: 1, mergeCommitSha: 'c1', issueId: '11' },
-            { number: 2, mergeCommitSha: 'c9', issueId: '12' },
-            { number: 3, mergeCommitSha: null, issueId: '13' },
+            { number: 1, mergeCommitSha: 'c1', issueId: '11', headRef: 'h' },
+            { number: 2, mergeCommitSha: 'c9', issueId: '12', headRef: 'h' },
+            { number: 3, mergeCommitSha: null, issueId: '13', headRef: 'h' },
         ];
         expect(fixesInRange(fixes, new Set(['c1', 'c2']))).toEqual([fixes[0]]);
     });
@@ -59,8 +59,16 @@ describe('resolveRelease', () => {
     const setup = () => {
         const github = new FakeGitHub();
         github.compareCommits = ['m1', 'm2', 'm3', 'other'];
-        const merged = (number: number, sha: string, issueId: string) =>
-            github.pr({ number, state: 'closed', merged: true, mergeCommitSha: sha, labels: ['sentry-autofix', 'sentry-fix-merged'], body: `<!-- sentry-issue: ${issueId} -->` });
+        const merged = (number: number, sha: string, issueId: string, head = `sentry-fix/s-${issueId}`) =>
+            github.pr({
+                number,
+                state: 'closed',
+                merged: true,
+                mergeCommitSha: sha,
+                labels: ['sentry-autofix', 'sentry-fix-merged'],
+                body: `<!-- sentry-issue: ${issueId} -->`,
+                head,
+            });
         merged(1, 'm1', '11');
         merged(2, 'm2', '12');
         merged(3, 'later', '13');
@@ -71,7 +79,7 @@ describe('resolveRelease', () => {
             if (method === 'PUT') return {};
             return { id, shortId: `S-${id}`, title: 't', culprit: '', permalink: 'p', project: { slug: projects[id] }, count: '1', substatus: 'ongoing', level: 'error' };
         });
-        return { github, sentry, calls };
+        return { github, sentry, calls, merged };
     };
 
     it('resolves the shipped fixes of the app in the exact release, and swaps their label', async () => {
@@ -97,6 +105,24 @@ describe('resolveRelease', () => {
         expect(labels(1)).toEqual(['sentry-autofix', 'sentry-fix-released']);
         expect(labels(2)).toEqual(['sentry-autofix', 'sentry-fix-merged']);
         expect(labels(3)).toEqual(['sentry-autofix', 'sentry-fix-merged']);
+    });
+
+    it('skips, with a warning, a pull request whose marker names an issue its branch is not for', async () => {
+        const { github, sentry, calls, merged } = setup();
+        github.compareCommits.push('m5');
+        merged(5, 'm5', '11', 'sentry-fix/s-77');
+        const input = { app: 'web', version: '1', release: '', tag: 't', previousTag: 'p' };
+        const { outcomes } = await resolveRelease({ octokit: github.octokit, repo, sentry, config, input });
+        expect(outcomes.find((outcome) => outcome.number === 5)).toEqual({
+            number: 5,
+            issueId: '11',
+            shortId: 'S-11',
+            resolved: false,
+            warning: true,
+            reason: 'skipped, because its marker names S-11 but its branch is sentry-fix/s-77',
+        });
+        expect(github.prs.find((pr) => pr.number === 5)?.labels).toEqual(['sentry-autofix', 'sentry-fix-merged']);
+        expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(2);
     });
 
     it('finds nothing left to do when run again', async () => {

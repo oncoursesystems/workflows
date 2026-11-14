@@ -4,11 +4,24 @@ export const LABELS = {
     released: { name: 'sentry-fix-released', color: '0e8a16', description: 'A sentry-fix pull request that shipped in a release' },
 } as const;
 
+export const branchName = (shortId: string): string => `sentry-fix/${shortId.toLowerCase()}`;
+
+// The marker and the branch are written together by publish, so a pull request whose two disagree was edited by hand
+// or carries a forged marker.
+export const markerMatchesBranch = (headRef: string, shortId: string): boolean => headRef === branchName(shortId);
+
 export const issueMarker = (issueId: string): string => `<!-- sentry-issue: ${issueId} -->`;
 
-const ISSUE_MARKER = /<!-- sentry-issue: (\d+) -->/;
+const ISSUE_MARKER = /^<!-- sentry-issue: (\d+) -->$/;
 
-export const markedIssueId = (body: string | null | undefined): string | undefined => ISSUE_MARKER.exec(body ?? '')?.[1];
+// Sentry and agent text in the body come before the marker, so only the last line counts.
+export const markedIssueId = (body: string | null | undefined): string | undefined => {
+    const lines = (body ?? '').split('\n').map((line) => line.trim()).filter((line) => line !== '');
+    return ISSUE_MARKER.exec(lines.at(-1) ?? '')?.[1];
+};
+
+// A zero-width joiner keeps untrusted text from opening an HTML comment, so it cannot plant or hide a marker.
+export const defang = (text: string): string => text.replaceAll('<!--', '<!-\u200d-');
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

@@ -151,12 +151,15 @@ async function mergedCommand(): Promise<void> {
             labels: ((pr['labels'] ?? []) as { name: string }[]).map((label) => label.name),
             body: (pr['body'] as string | null | undefined) ?? null,
             url: pr['html_url'] as string,
+            headRef: (pr['head'] as { ref: string }).ref,
         },
         octokit,
         context.repo,
         sentryOptions(),
     );
-    core.info(outcome.kind === 'marked' ? `#${pr.number} marked as merged for Sentry issue ${outcome.issueId}.` : `#${pr.number} ignored: ${outcome.reason}.`);
+    if (outcome.kind === 'marked') core.info(`#${pr.number} marked as merged for Sentry issue ${outcome.issueId}.`);
+    else if (outcome.kind === 'mismatch') core.warning(`#${pr.number} skipped: ${outcome.reason}.`);
+    else core.info(`#${pr.number} ignored: ${outcome.reason}.`);
 }
 
 async function releaseCommand(): Promise<void> {
@@ -176,6 +179,7 @@ async function releaseCommand(): Promise<void> {
             previousTag: core.getInput('previous-tag', { required: true }),
         },
     });
+    for (const outcome of outcomes) if (outcome.warning === true) core.warning(`#${outcome.number} ${outcome.shortId}: ${outcome.reason}`);
     const lines = outcomes.map((outcome) => `- #${outcome.number} ${outcome.shortId}: ${outcome.reason}`);
     const summary = [`## Sentry issues resolved in ${release}`, '', ...(lines.length === 0 ? ['No sentry-fix pull request shipped in this release.'] : lines), ''].join('\n');
     core.info(summary);
