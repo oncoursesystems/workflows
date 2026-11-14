@@ -20,6 +20,10 @@ inputs:
     description: Path of the sentry-fix config, read from the default branch.
     required: false
     default: .github/sentry-fix.yml
+  limit:
+    description: Issues to attempt, from 1 to 20. Empty uses the config's limit.
+    required: false
+    default: ''
   dry-run:
     description: Print the walk to the job summary and output no issues.
     required: false
@@ -68,6 +72,7 @@ runs:
         INPUT_SENTRY-ORG: ${{ inputs.sentry-org }}
         INPUT_TYPESAFE-API-KEY: ${{ inputs.typesafe-api-key }}
         INPUT_CONFIG-PATH: ${{ inputs.config-path }}
+        INPUT_LIMIT: ${{ inputs.limit }}
         INPUT_DRY-RUN: ${{ inputs.dry-run }}
         INPUT_JEV-MODEL: ${{ inputs.jev-model }}
         INPUT_PLAN-DIR: ${{ inputs.plan-dir }}

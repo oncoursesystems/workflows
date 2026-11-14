@@ -4,7 +4,7 @@ import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
 import { DEFAULT_JEV_MODEL } from '../jev/transport.ts';
 import { runAgent } from '../review/agent.ts';
-import { DEFAULT_CONFIG_PATH } from './config.ts';
+import { DEFAULT_CONFIG_PATH, withLimit } from './config.ts';
 import { agentEnv, CLAUDE_AUTH_VARIABLE } from './env.ts';
 import { runFixer } from './fixer.ts';
 import { defaultBranchHead, requireConfig } from './github.ts';
@@ -38,7 +38,7 @@ async function planCommand(): Promise<void> {
     core.setSecret(apiKey);
     const dryRun = core.getInput('dry-run') === 'true';
     const head = await defaultBranchHead(octokit, context.repo);
-    const config = await requireConfig(octokit, context.repo, head.branch, configPath());
+    const config = withLimit(await requireConfig(octokit, context.repo, head.branch, configPath()), core.getInput('limit'));
     const result = await plan({
         octokit,
         repo: context.repo,

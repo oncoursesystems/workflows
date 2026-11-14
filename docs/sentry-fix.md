@@ -91,6 +91,10 @@ The calling repository keeps its config at `.github/sentry-fix.yml` on the defau
 
 **Optional** Path of the config, read from the default branch. **Default** `.github/sentry-fix.yml`
 
+### `limit`
+
+**Optional** Issues to attempt in this run, from 1 to 20. A manual run uses it to try one issue first, or to fix more between the weekly runs. **Default** empty, which uses the config's `limit`
+
 ### `dry-run`
 
 **Optional** `true` ranks, applies the rules and Jev triage, and prints the walk to the job summary: each issue, its event count, the decision and the reason. No fixer runs, and nothing is written to GitHub or Sentry. **Default** `false`

@@ -48,11 +48,13 @@ const AppFile = z.strictObject({
     projects: z.array(z.string().min(1)).min(1),
 });
 
+const Limit = z.number().int().min(1).max(20);
+
 const unique = (values: readonly string[]): boolean => new Set(values).size === values.length;
 
 const ConfigFile = z
     .strictObject({
-        limit: z.number().int().min(1).max(20).default(5),
+        limit: Limit.default(5),
         environment: z.string().min(1).default('production'),
         period: z.enum(PERIODS).default('7d'),
         projects: z.array(ProjectFile).min(1),
@@ -81,6 +83,13 @@ export function parseConfig(text: string): ConfigParse {
     const result = ConfigFile.safeParse(doc.toJS());
     if (!result.success) return { ok: false, error: describeIssues(result.error) };
     return { ok: true, config: result.data };
+}
+
+export function withLimit(config: SentryFixConfig, input: string): SentryFixConfig {
+    if (input.trim() === '') return config;
+    const limit = Limit.safeParse(Number(input));
+    if (!limit.success) throw new Error(`limit must be a whole number from 1 to 20, not ${input}`);
+    return { ...config, limit: limit.data };
 }
 
 export const projectOf = (config: SentryFixConfig, slug: string): ProjectConfig | undefined =>
