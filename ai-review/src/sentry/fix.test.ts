@@ -156,22 +156,24 @@ describe('leakedIn', () => {
 });
 
 describe('fixerTools', () => {
-    it('allows edits under the roots, read-only git, and the exact project commands, and nothing from the web', () => {
+    it('allows reads, edits under the roots and the exact project commands, and no git, shell or web access', () => {
         const { tools, allowedTools } = fixerTools(project);
         expect(tools).toEqual(['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash']);
         expect(allowedTools).toEqual([
+            'Read',
+            'Grep',
+            'Glob',
             'Edit(./client/web/**)',
             'Edit(./src/Web/**)',
-            'Bash(git diff:*)',
-            'Bash(git status:*)',
             'Bash(npm --prefix client/web test)',
             'Bash(npm --prefix client/web run lint)',
         ]);
+        expect(allowedTools.filter((tool) => tool.startsWith('Bash(git'))).toEqual([]);
         expect([...tools, ...allowedTools].some((tool) => /Web(Fetch|Search)/.test(tool))).toBe(false);
     });
 
     it('allows edits anywhere for a root of .', () => {
-        expect(fixerTools({ ...project, roots: ['.'], commands: [] }).allowedTools).toEqual(['Edit(./**)', 'Bash(git diff:*)', 'Bash(git status:*)']);
+        expect(fixerTools({ ...project, roots: ['.'], commands: [] }).allowedTools).toEqual(['Read', 'Grep', 'Glob', 'Edit(./**)']);
     });
 });
 

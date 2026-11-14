@@ -1,12 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { RepoRules } from '../review/prompts.ts';
-import type { RunAgent } from '../review/agent.ts';
 import {
     FIXER_BUDGET_USD,
     FIXER_MAX_TURNS,
     FIXER_MODEL,
-    FixOutput,
     fixerPrompt,
     fixerSystemPrompt,
     fixerTools,
@@ -14,7 +12,8 @@ import {
     leakedIn,
 } from './fix.ts';
 import { collectChanges, gitIn, snapshot, tamperedPaths, type Git } from './git.ts';
-import type { ChangedFile, FixResult, PlannedIssue } from './handoff.ts';
+import type { FixResult, PlannedIssue } from './handoff.ts';
+import type { SessionRequest, SessionResult } from './session.ts';
 
 async function readRules(cwd: string): Promise<RepoRules> {
     const read = (name: string) => readFile(join(cwd, name), 'utf8').catch(() => undefined);
@@ -22,14 +21,32 @@ async function readRules(cwd: string): Promise<RepoRules> {
     return { ...(claudeMd === undefined ? {} : { claudeMd }), ...(reviewMd === undefined ? {} : { reviewMd }) };
 }
 
+export type Containers = {
+    // Runs the agent session in a throwaway container with the checkout mounted.
+    session(request: SessionRequest): Promise<SessionResult>;
+};
+
 export type FixerOptions = {
     planned: PlannedIssue;
     cwd: string;
-    runAgent: RunAgent;
-    env: Record<string, string>;
+    containers: Containers;
     secrets: () => readonly string[];
     git?: Git;
 };
+
+const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+export async function sessionRequest(planned: PlannedIssue, cwd: string): Promise<SessionRequest> {
+    return {
+        model: FIXER_MODEL,
+        systemPrompt: fixerSystemPrompt(planned.project, await readRules(cwd)),
+        prompt: fixerPrompt(planned.context),
+        effort: 'high',
+        maxTurns: FIXER_MAX_TURNS,
+        maxBudgetUsd: FIXER_BUDGET_USD,
+        ...fixerTools(planned.project),
+    };
+}
 
 export async function runFixer(options: FixerOptions): Promise<FixResult> {
     const { planned, cwd } = options;
@@ -38,23 +55,13 @@ export async function runFixer(options: FixerOptions): Promise<FixResult> {
     if (head !== planned.sha) return { status: 'failed', error: `the checkout is at ${head}, but the plan was made at ${planned.sha}` };
     const before = await snapshot(git, cwd);
 
-    let run;
+    let session: SessionResult;
     try {
-        run = await options.runAgent({
-            model: FIXER_MODEL,
-            systemPrompt: fixerSystemPrompt(planned.project, await readRules(cwd)),
-            prompt: fixerPrompt(planned.context),
-            schema: FixOutput,
-            cwd,
-            effort: 'high',
-            maxTurns: FIXER_MAX_TURNS,
-            maxBudgetUsd: FIXER_BUDGET_USD,
-            ...fixerTools(planned.project),
-            env: options.env,
-        });
+        session = await options.containers.session(await sessionRequest(planned, cwd));
     } catch (error) {
-        return { status: 'failed', error: error instanceof Error ? error.message : String(error) };
+        return { status: 'failed', error: `the session container failed: ${errorText(error)}` };
     }
+    if (session.status !== 'done') return { status: 'failed', error: session.error };
 
     const tampered = await tamperedPaths(cwd, before);
     if (tampered.length > 0) {
@@ -62,7 +69,6 @@ export async function runFixer(options: FixerOptions): Promise<FixResult> {
     }
     const changes = await collectChanges(git, cwd, before, planned.project.roots);
     const texts = changes.flatMap((change) => (change.content === null ? [] : [{ path: change.path, text: Buffer.from(change.content, 'base64').toString('utf8') }]));
-    const verdict = gate({ output: run.output, changes, project: planned.project, leaks: leakedIn(texts, options.secrets()) });
-    const { billing, costUsd, turns, durationMs, denied } = run.stats;
-    return { status: 'done', output: run.output, gate: verdict, changes, stats: { billing, costUsd, turns, durationMs, denied } };
+    const verdict = gate({ output: session.output, changes, project: planned.project, leaks: leakedIn(texts, options.secrets()) });
+    return { status: 'done', output: session.output, gate: verdict, changes, stats: session.stats };
 }

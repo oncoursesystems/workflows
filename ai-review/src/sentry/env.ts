@@ -1,22 +1,10 @@
 export const CLAUDE_AUTH_VARIABLE = 'CLAUDE_CODE_OAUTH_TOKEN';
 
-const BASE_VARIABLES = [
-    'PATH',
-    'HOME',
-    'USER',
-    'SHELL',
-    'TERM',
-    'TMPDIR',
-    'TZ',
-    'LANG',
-    'LANGUAGE',
-    'CI',
-    'DOTNET_ROOT',
-    'DOTNET_NOLOGO',
-    'DOTNET_CLI_TELEMETRY_OPTOUT',
-    'DOTNET_SKIP_FIRST_TIME_EXPERIENCE',
-    'JAVA_HOME',
-];
+// Only variables that mean the same inside the fixer's container. PATH, HOME and the toolchain roots describe the
+// runner's file system, so the image sets its own.
+const BASE_VARIABLES = ['TERM', 'TZ', 'LANG', 'LANGUAGE', 'CI', 'DOTNET_NOLOGO', 'DOTNET_CLI_TELEMETRY_OPTOUT', 'DOTNET_SKIP_FIRST_TIME_EXPERIENCE'];
+
+const IMAGE_VARIABLES = new Set(['PATH', 'HOME']);
 
 const LOCALE = /^LC_[A-Z]+$/;
 
@@ -28,15 +16,28 @@ export const isSecretName = (name: string): boolean => SECRET.test(name);
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const isVariableName = (name: string): boolean => NAME.test(name);
 
-// Claude Code strips its own credentials from the commands it runs when this is set.
-const SCRUB = { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' };
+export type ContainerAuth = 'claude' | 'none';
 
-export function agentEnv(source: Readonly<Record<string, string | undefined>>, extra: readonly string[]): Record<string, string> {
-    const allowed = new Set([...BASE_VARIABLES, ...extra.filter((name) => !isSecretName(name))]);
+// The environment of a fixer container, as names and the runner's values for them. The values reach Docker through
+// the environment of the docker command, never its arguments.
+export function containerEnv(source: Readonly<Record<string, string | undefined>>, extra: readonly string[], auth: ContainerAuth): Record<string, string> {
+    const allowed = new Set([...BASE_VARIABLES, ...extra.filter((name) => !isSecretName(name) && !IMAGE_VARIABLES.has(name))]);
     const env: Record<string, string> = {};
     for (const [name, value] of Object.entries(source)) {
         if (value === undefined) continue;
-        if (allowed.has(name) || LOCALE.test(name) || name === CLAUDE_AUTH_VARIABLE) env[name] = value;
+        if (allowed.has(name) || LOCALE.test(name) || (auth === 'claude' && name === CLAUDE_AUTH_VARIABLE)) env[name] = value;
     }
-    return { ...env, ...SCRUB };
+    return env;
+}
+
+const DOCKER_CLIENT = ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONFIG', 'DOCKER_CONTEXT', 'DOCKER_CERT_PATH', 'DOCKER_TLS_VERIFY'];
+
+// The docker command itself needs only what finds the daemon, plus the container's variables to pass by name.
+export function dockerClientEnv(source: Readonly<Record<string, string | undefined>>, container: Readonly<Record<string, string>>): Record<string, string> {
+    const env: Record<string, string> = {};
+    for (const name of DOCKER_CLIENT) {
+        const value = source[name];
+        if (value !== undefined) env[name] = value;
+    }
+    return { ...env, ...container };
 }

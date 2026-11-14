@@ -1,7 +1,8 @@
 name: Sentry fix run
 description: >
-  Run the Claude fixer on one planned Sentry issue in the checked-out repository, check its change against the
-  gate, and write the result for the publish job. It holds no GitHub or Sentry token.
+  Run the Claude fixer on one planned Sentry issue inside a throwaway Docker container, check its change against
+  the gate, and write the result for the publish job. It holds no GitHub or Sentry token. The runner needs Docker
+  with buildx.
 
 inputs:
   plan-file:
@@ -19,26 +20,17 @@ inputs:
   claude-code-oauth-token:
     description: Claude Code OAuth token the fixer runs on.
     required: true
-  anthropic-federation-rule-id:
-    description: Workload identity federation rule to fall back on when the subscription hits a usage limit.
-    required: false
-  anthropic-organization-id:
-    description: Anthropic organization ID that owns the federation rule.
-    required: false
-  anthropic-service-account-id:
-    description: Service account the federation rule targets.
-    required: false
-  anthropic-workspace-id:
-    description: Workspace the API calls are billed to.
-    required: false
   node-version:
-    description: Node.js version the project commands need. Set up after the fixer's own Node.js, so it comes first on PATH.
+    description: Node.js version the project commands need, as a major or an exact version. Defaults to 24.
     required: false
   dotnet-version:
-    description: .NET SDK version the project commands need.
+    description: .NET SDK image tag the project commands need, such as 10.0 or 10.0.100. Defaults to 10.0.
     required: false
   global-json-file:
-    description: global.json that names the .NET SDK the project commands need.
+    description: global.json in the checkout that names the .NET SDK. Wins over dotnet-version.
+    required: false
+  fix-image:
+    description: An image to run the fixer in instead of building one from this action's Dockerfile.
     required: false
 
 runs:
@@ -49,25 +41,9 @@ runs:
         node-version: 24
 
     - name: Install sentry-fix
-      id: harness
       shell: bash
       working-directory: ${{ github.action_path }}/../../../ai-review
-      run: |
-        npm ci --omit=dev --no-audit --no-fund
-        echo "node=$(command -v node)" >> "$GITHUB_OUTPUT"
-
-    - name: Set up the project's Node.js
-      if: inputs.node-version != ''
-      uses: actions/setup-node@v7
-      with:
-        node-version: ${{ inputs.node-version }}
-
-    - name: Set up the project's .NET SDK
-      if: inputs.dotnet-version != '' || inputs.global-json-file != ''
-      uses: actions/setup-dotnet@v6
-      with:
-        dotnet-version: ${{ inputs.dotnet-version }}
-        global-json-file: ${{ inputs.global-json-file }}
+      run: npm ci --omit=dev --no-audit --no-fund
 
     - name: Fix the issue
       shell: bash
@@ -77,9 +53,10 @@ runs:
         INPUT_PLAN-SHA256: ${{ inputs.plan-sha256 }}
         INPUT_ISSUE-ID: ${{ inputs.issue-id }}
         INPUT_OUT-DIR: ${{ inputs.out-dir }}
+        INPUT_NODE-VERSION: ${{ inputs.node-version }}
+        INPUT_DOTNET-VERSION: ${{ inputs.dotnet-version }}
+        INPUT_GLOBAL-JSON-FILE: ${{ inputs.global-json-file }}
+        INPUT_FIX-IMAGE: ${{ inputs.fix-image }}
+        INPUT_DOCKERFILE: ${{ github.action_path }}/Dockerfile
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
-        INPUT_ANTHROPIC-FEDERATION-RULE-ID: ${{ inputs.anthropic-federation-rule-id }}
-        INPUT_ANTHROPIC-ORGANIZATION-ID: ${{ inputs.anthropic-organization-id }}
-        INPUT_ANTHROPIC-SERVICE-ACCOUNT-ID: ${{ inputs.anthropic-service-account-id }}
-        INPUT_ANTHROPIC-WORKSPACE-ID: ${{ inputs.anthropic-workspace-id }}
-      run: '"${{ steps.harness.outputs.node }}" --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/sentry/action.ts"'
+      run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/sentry/action.ts"

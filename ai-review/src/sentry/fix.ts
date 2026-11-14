@@ -99,17 +99,12 @@ export const insideRoots = (path: string, roots: readonly string[]): boolean =>
 
 const editRule = (root: string): string => `Edit(${root === '.' ? './**' : `./${root}/**`})`;
 
-// Read, Grep and Glob stay unlisted: Claude Code allows them inside the working directory and, under dontAsk,
-// denies them anywhere else, such as /proc or the runner's home.
+// The agent runs in a container that holds only the checkout, so reading anywhere in it is safe. The runner works
+// out the diff itself, so the agent gets no git command.
 export function fixerTools(project: ProjectConfig): { tools: string[]; allowedTools: string[] } {
     return {
         tools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash'],
-        allowedTools: [
-            ...project.roots.map(editRule),
-            'Bash(git diff:*)',
-            'Bash(git status:*)',
-            ...project.commands.map((command) => `Bash(${command})`),
-        ],
+        allowedTools: ['Read', 'Grep', 'Glob', ...project.roots.map(editRule), ...project.commands.map((command) => `Bash(${command})`)],
     };
 }
 
@@ -141,8 +136,8 @@ export function fixerSystemPrompt(project: ProjectConfig, rules: RepoRules): str
             'dotnet-tools.json, Dockerfiles, shell scripts, or webpack, vite, jest, eslint, babel, metro, tsconfig or app ' +
             'configs. When the fix needs one, answer no-fix and say which file and why.',
         '- Do not commit, push or create branches. Leave the change in the working tree. The workflow commits it.',
-        '- Bash runs only `git diff`, `git status` and these project commands. Run each one exactly as written, ' +
-            'without cd, pipes or redirection, or it is denied:',
+        '- Bash runs only these project commands. Run each one exactly as written, without cd, pipes or redirection, ' +
+            'or it is denied. Git is not available to you; the workflow reads your changes from the working tree:',
         commands,
         '- Answer no-fix when the root cause is not in this code, when the fix needs files outside those directories, ' +
             'or when you are not confident. A wrong fix costs a reviewer more than no fix.',

@@ -26,7 +26,6 @@ jobs:
       contents: read
       pull-requests: read
       issues: read
-      id-token: write
     with:
       dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
       runs-on: linux
@@ -34,10 +33,6 @@ jobs:
       global-json-file: global.json
       sentry-org: ${{ vars.SENTRY_ORG }}
       bot-client-id: ${{ vars.GH_APP_CLIENT_ID }}
-      anthropic-federation-rule-id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
-      anthropic-organization-id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
-      anthropic-service-account-id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
-      anthropic-workspace-id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
     secrets:
       sentry-token: ${{ secrets.SENTRY_TOKEN }}
       typesafe-api-key: ${{ secrets.TYPESAFE_AI_KEY }}

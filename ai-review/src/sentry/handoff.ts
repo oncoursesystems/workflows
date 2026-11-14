@@ -87,7 +87,7 @@ const ChangedFileData = z.object({
 
 export type FixStats = { billing: string; costUsd: number; turns: number; durationMs: number; denied: string[] };
 
-const FixStatsData = z.object({
+export const FixStatsData = z.object({
     billing: z.string(),
     costUsd: z.number(),
     turns: z.number(),

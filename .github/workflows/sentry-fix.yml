@@ -1,8 +1,9 @@
 name: sentry-fix
 
-# Three jobs keep each secret where it is needed. plan reads Sentry and GitHub. fix runs Claude on the checkout
-# and holds only the Claude credentials, because the project commands it runs execute repository code that the
-# fixer can change. publish runs on a fresh runner with the bot and Sentry tokens and never runs that code.
+# Three jobs keep each secret where it is needed. plan reads Sentry and GitHub. fix holds only the Claude OAuth
+# token, and runs the agent and the project commands in throwaway Docker containers, because those commands
+# execute repository code the fixer can change. publish holds the bot and Sentry tokens and runs none of that
+# code. See the Security section of docs/sentry-fix.md for what the containers isolate and what they do not.
 
 on:
   workflow_call:
@@ -16,19 +17,23 @@ on:
         type: boolean
         default: false
       runs-on:
-        description: Runner label for every job
+        description: Runner label for every job. The fix job needs Docker with buildx on it.
         type: string
         default: linux
       node-version:
-        description: Node.js version the project commands need
+        description: Node.js version the project commands need, as a major or an exact version. Defaults to 24.
         type: string
         default: ''
       dotnet-version:
-        description: .NET SDK version the project commands need
+        description: .NET SDK image tag the project commands need, such as 10.0. Defaults to 10.0.
         type: string
         default: ''
       global-json-file:
-        description: global.json that names the .NET SDK the project commands need
+        description: global.json in the checkout that names the .NET SDK the project commands need
+        type: string
+        default: ''
+      fix-image:
+        description: An image to run the fixer in instead of the one built from the sentry-fix-run Dockerfile
         type: string
         default: ''
       sentry-org:
@@ -39,18 +44,6 @@ on:
         description: Client ID of the GitHub App that opens the pull requests
         type: string
         required: true
-      anthropic-federation-rule-id:
-        type: string
-        default: ''
-      anthropic-organization-id:
-        type: string
-        default: ''
-      anthropic-service-account-id:
-        type: string
-        default: ''
-      anthropic-workspace-id:
-        type: string
-        default: ''
     secrets:
       sentry-token:
         required: true
@@ -102,10 +95,9 @@ jobs:
     if: needs.plan.outputs.count != '' && needs.plan.outputs.count != '0'
     name: fix ${{ matrix.issue.shortId }}
     runs-on: ${{ inputs.runs-on }}
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
-      id-token: write
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -132,13 +124,10 @@ jobs:
           issue-id: ${{ matrix.issue.id }}
           out-dir: ${{ runner.temp }}/sentry-fix/${{ matrix.issue.id }}
           claude-code-oauth-token: ${{ secrets.claude-code-oauth-token }}
-          anthropic-federation-rule-id: ${{ inputs.anthropic-federation-rule-id }}
-          anthropic-organization-id: ${{ inputs.anthropic-organization-id }}
-          anthropic-service-account-id: ${{ inputs.anthropic-service-account-id }}
-          anthropic-workspace-id: ${{ inputs.anthropic-workspace-id }}
           node-version: ${{ inputs.node-version }}
           dotnet-version: ${{ inputs.dotnet-version }}
           global-json-file: ${{ inputs.global-json-file }}
+          fix-image: ${{ inputs.fix-image }}
 
       - name: Keep the result for the publish job
         if: always()
