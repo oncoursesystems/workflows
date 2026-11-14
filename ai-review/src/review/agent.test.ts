@@ -4,10 +4,14 @@ import { z } from 'zod';
 let messages: unknown[] = [];
 let sessions: unknown[][] = [];
 let envs: Array<Record<string, string | undefined>> = [];
+let toolOptions: Array<{ tools: string[]; allowedTools: string[] }> = [];
+
+type Options = { env: Record<string, string | undefined>; tools: string[]; allowedTools: string[] };
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
-    query: ({ options }: { options: { env: Record<string, string | undefined> } }) => {
+    query: ({ options }: { options: Options }) => {
         envs.push(options.env);
+        toolOptions.push({ tools: options.tools, allowedTools: options.allowedTools });
         const session = sessions.shift() ?? messages;
         return (async function* () {
             yield* session;
@@ -64,6 +68,30 @@ describe('runAgent', () => {
     it('reports any other error result with its message', async () => {
         messages = [result({ is_error: true, result: 'API Error: 529 overloaded' })];
         await expect(runAgent(request)).rejects.toThrow('claude-sonnet-5-5 stopped with an error: API Error: 529 overloaded');
+    });
+
+    it('keeps the read-only review tools and the process env when the request names none', async () => {
+        process.env['SENTRY_FIX_TEST_VAR'] = 'present';
+        toolOptions = [];
+        messages = [result({ structured_output: { ok: true } })];
+        await runAgent(request);
+        expect(toolOptions[0]).toEqual({
+            tools: ['Read', 'Grep', 'Glob', 'Bash'],
+            allowedTools: ['Read', 'Grep', 'Glob', 'Bash(git log:*)', 'Bash(git blame:*)', 'Bash(git show:*)', 'Bash(git diff:*)'],
+        });
+        expect(envs[0]?.['SENTRY_FIX_TEST_VAR']).toBe('present');
+        delete process.env['SENTRY_FIX_TEST_VAR'];
+    });
+
+    it('runs with the tools and the env the request gives, and nothing else from the process env', async () => {
+        process.env['GITHUB_TOKEN'] = 'ghs_secret';
+        toolOptions = [];
+        messages = [result({ structured_output: { ok: true } })];
+        await runAgent({ ...request, tools: ['Read', 'Edit'], allowedTools: ['Read', 'Edit(src/**)'], env: { PATH: '/bin' } });
+        expect(toolOptions[0]).toEqual({ tools: ['Read', 'Edit'], allowedTools: ['Read', 'Edit(src/**)'] });
+        expect(envs[0]?.['PATH']).toBe('/bin');
+        expect(envs[0]).not.toHaveProperty('GITHUB_TOKEN');
+        delete process.env['GITHUB_TOKEN'];
     });
 
     it('ignores a rate limit warning that did not stop the run', async () => {

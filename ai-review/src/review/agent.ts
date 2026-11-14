@@ -10,6 +10,9 @@ export type AgentRequest<T> = {
     effort: 'low' | 'medium' | 'high';
     maxTurns: number;
     maxBudgetUsd: number;
+    tools?: readonly string[];
+    allowedTools?: readonly string[];
+    env?: Readonly<Record<string, string>>;
 };
 
 export type Billing = 'subscription' | 'api';
@@ -45,10 +48,10 @@ const deniedCall = ({ tool_name, tool_input }: { tool_name: string; tool_input: 
 
 type Auth = { billing: 'subscription' } | { billing: 'api'; token: string };
 
-const sessionEnv = (auth: Auth) =>
+const sessionEnv = (auth: Auth, base: Readonly<Record<string, string | undefined>>) =>
     auth.billing === 'subscription'
-        ? { ...process.env, ANTHROPIC_API_KEY: undefined, ANTHROPIC_AUTH_TOKEN: undefined }
-        : { ...process.env, ANTHROPIC_AUTH_TOKEN: auth.token, ANTHROPIC_API_KEY: undefined, CLAUDE_CODE_OAUTH_TOKEN: undefined };
+        ? { ...base, ANTHROPIC_API_KEY: undefined, ANTHROPIC_AUTH_TOKEN: undefined }
+        : { ...base, ANTHROPIC_AUTH_TOKEN: auth.token, ANTHROPIC_API_KEY: undefined, CLAUDE_CODE_OAUTH_TOKEN: undefined };
 
 export const runAgent: RunAgent = (request) => runSession(request, { billing: 'subscription' });
 
@@ -77,12 +80,12 @@ async function runSession<T>(request: AgentRequest<T>, auth: Auth): Promise<Agen
     const session = query({
         prompt: request.prompt,
         options: {
-            env: sessionEnv(auth),
+            env: sessionEnv(auth, request.env ?? process.env),
             model: request.model,
             systemPrompt: request.systemPrompt,
             cwd: request.cwd,
-            tools: TOOLS,
-            allowedTools: ALLOWED_TOOLS,
+            tools: [...(request.tools ?? TOOLS)],
+            allowedTools: [...(request.allowedTools ?? ALLOWED_TOOLS)],
             permissionMode: 'dontAsk',
             settingSources: [],
             persistSession: false,
