@@ -1,0 +1,124 @@
+# sentry-fix in a calling repository. Each YAML document below is one file: copy the two workflows
+# into .github/workflows/, add the release step to the release workflow, and add the config at the
+# bottom as .github/sentry-fix.yml on the default branch.
+
+# --- .github/workflows/sentry-fix.yml ---------------------------------------------------------------
+name: sentry-fix
+
+on:
+  schedule:
+    - cron: "0 11 * * 1" # Mondays at 11:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Print the walk only, and run no fixer
+        type: boolean
+        default: true
+
+concurrency:
+  group: sentry-fix
+  cancel-in-progress: false
+
+jobs:
+  sentry-fix:
+    uses: oncoursesystems/workflows/.github/workflows/sentry-fix.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    with:
+      dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+      runs-on: linux
+      node-version: "20"
+      global-json-file: global.json
+      sentry-org: ${{ vars.SENTRY_ORG }}
+      bot-client-id: ${{ vars.GH_APP_CLIENT_ID }}
+      anthropic-federation-rule-id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+      anthropic-organization-id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+      anthropic-service-account-id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+      anthropic-workspace-id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+    secrets:
+      sentry-token: ${{ secrets.SENTRY_TOKEN }}
+      typesafe-api-key: ${{ secrets.TYPESAFE_AI_KEY }}
+      claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      bot-app-private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+---
+# --- .github/workflows/sentry-fix-merged.yml --------------------------------------------------------
+name: sentry-fix-merged
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  merged:
+    if: github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'sentry-autofix')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: oncoursesystems/workflows/.github/actions/sentry-fix-merged@main
+        with:
+          github-token: ${{ github.token }}
+          sentry-token: ${{ secrets.SENTRY_TOKEN }}
+          sentry-org: ${{ vars.SENTRY_ORG }}
+
+# --- A step in the release workflow, after the release exists in Sentry -----------------------------
+# Web: the version is the one create-release tagged. Mobile: run it after the store build and pass the
+# whole release name with its +build suffix instead of the version.
+#
+#      - uses: oncoursesystems/workflows/.github/actions/sentry-fix-release@main
+#        with:
+#          github-token: ${{ github.token }}
+#          sentry-token: ${{ secrets.SENTRY_TOKEN }}
+#          sentry-org: ${{ vars.SENTRY_ORG }}
+#          app: web
+#          version: ${{ env.VERSION }}
+#          tag: ${{ env.VERSION }}
+#          previous-tag: ${{ steps.previous.outputs.tag }}
+#
+#      - uses: oncoursesystems/workflows/.github/actions/sentry-fix-release@main
+#        with:
+#          github-token: ${{ github.token }}
+#          sentry-token: ${{ secrets.SENTRY_TOKEN }}
+#          sentry-org: ${{ vars.SENTRY_ORG }}
+#          app: mobile
+#          release: com.oncourse.mobile@${{ steps.build.outputs.version }}+${{ steps.build.outputs.build-number }}
+#          tag: ${{ steps.build.outputs.tag }}
+#          previous-tag: ${{ steps.previous.outputs.tag }}
+
+---
+# --- .github/sentry-fix.yml (config, on the default branch) -----------------------------------------
+limit: 5
+environment: production
+period: 7d
+projects:
+  - slug: oncourse-dotnet
+    description: The ASP.NET server and its services. Oracle access goes through PL/SQL packages in the database.
+    roots: [src]
+    commands:
+      - dotnet build src/OnCourse.sln -m:2
+      - dotnet test src/OnCourse.Tests/OnCourse.Tests.csproj
+  - slug: oncourse-web
+    description: The ExtJS 7 single page app that teachers and administrators use.
+    roots: [client/web]
+    commands:
+      - npm --prefix client/web test
+      - npm --prefix client/web run lint
+  - slug: oncourse-mobile
+    description: The mobile app.
+    roots: [client/mobile]
+    commands:
+      - npm --prefix client/mobile test
+apps:
+  - name: web
+    release: OnCourse.Web@{version}
+    projects: [oncourse-dotnet, oncourse-web]
+  - name: mobile
+    release: com.oncourse.mobile@{version}
+    projects: [oncourse-mobile]
