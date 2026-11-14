@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Octokit } from '../github/client.ts';
 
 export type FakePr = {
@@ -142,7 +143,7 @@ export class FakeGitHub {
                 getCommit: async ({ commit_sha }: { commit_sha: string }) => {
                     const commit = this.commits.get(commit_sha);
                     if (commit === undefined) throw notFound();
-                    return { data: { sha: commit_sha, tree: { sha: commit.tree } } };
+                    return { data: { sha: commit_sha, tree: { sha: commit.tree }, parents: commit.parents.map((sha) => ({ sha })) } };
                 },
                 createBlob: async ({ content }: { content: string }) => {
                     const sha = nextSha();
@@ -150,7 +151,8 @@ export class FakeGitHub {
                     return { data: { sha } };
                 },
                 createTree: async ({ base_tree, tree }: { base_tree?: string; tree: Array<{ path: string; mode: string; sha: string | null }> }) => {
-                    const sha = nextSha();
+                    const content = JSON.stringify({ base_tree, tree: tree.map((entry) => ({ ...entry, sha: entry.sha && this.blobs.get(entry.sha) })) });
+                    const sha = createHash('sha1').update(content).digest('hex');
                     this.trees.set(sha, { base: base_tree, entries: tree });
                     return { data: { sha } };
                 },
