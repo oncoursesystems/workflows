@@ -19,8 +19,7 @@ import type { SentryOptions } from './sentry.ts';
 
 const RESULT_FILE = 'result.json';
 
-// The workflow uploads each fix job's result as this artifact, and download-artifact puts it in a directory of the same name.
-const artifactName = (issueId: string): string => `sentry-fix-result-${issueId}`;
+const resultFolder = (issueId: string): string => `sentry-fix-result-${issueId}`;
 
 const readPlanInput = () => readPlan(core.getInput('plan-file', { required: true }), core.getInput('plan-sha256', { required: true }));
 
@@ -70,7 +69,7 @@ async function fixIn(cwd: string, planned: PlannedIssue): Promise<FixResult> {
 
 async function fixCommand(): Promise<void> {
     const planned = plannedIssue(await readPlanInput(), core.getInput('issue-id', { required: true }));
-    const out = core.getInput('out-dir', { required: true });
+    const out = join(core.getInput('out-dir', { required: true }), resultFolder(planned.context.issue.id));
     const result = await fixIn(process.env['GITHUB_WORKSPACE'] ?? process.cwd(), planned);
     await mkdir(out, { recursive: true });
     await writeFile(join(out, RESULT_FILE), JSON.stringify(result));
@@ -99,7 +98,7 @@ async function publishCommand(): Promise<void> {
     let failures = 0;
     for (const planned of issues) {
         const { id, shortId } = planned.context.issue;
-        const path = join(dir, artifactName(id), RESULT_FILE);
+        const path = join(dir, resultFolder(id), RESULT_FILE);
         try {
             if (!(await access(path).then(() => true, () => false))) {
                 lines.push(`- ${shortId}: not published, because the fix job left no result`);

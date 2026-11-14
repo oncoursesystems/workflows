@@ -14,7 +14,7 @@ inputs:
     description: Sentry issue id of the planned issue to fix.
     required: true
   out-dir:
-    description: Directory the result is written to.
+    description: Directory that gets a sentry-fix-result-<issue id> folder holding the result.
     required: true
   claude-code-oauth-token:
     description: Claude Code OAuth token the fixer runs on.
