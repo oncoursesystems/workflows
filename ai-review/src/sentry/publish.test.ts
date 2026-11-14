@@ -73,8 +73,8 @@ describe('publish', () => {
         const pr = github.prs.find((candidate) => candidate.number === 101)!;
         expect(github.calls).toContain('create sentry-fix/oncourse-web-3k -> main');
         expect(pr.title).toBe('fix(gradebook): wait for the period store');
-        expect(pr.labels).toEqual(['sentry-autofix']);
-        expect(github.repoLabels).toEqual(['sentry-autofix']);
+        expect(pr.labels).toEqual(['sentry-autofix', 'sentry']);
+        expect(github.repoLabels).toEqual(['sentry-autofix', 'sentry']);
         expect(pr.body).toContain('[ONCOURSE-WEB-3K](https://sentry.io/organizations/o/issues/101/) in `oncourse-web` had 1,234 events in the last 7 days.');
         expect(pr.body).toContain('Fixes ONCOURSE-WEB-3K');
         expect(pr.body).toContain('app/view/gradebook/Grid.js:42 in onLoad');
@@ -95,7 +95,7 @@ describe('publish', () => {
         const again = await publish(planned, done(), options);
         expect(again).toEqual({ kind: 'pr', url: 'https://github.com/o/r/pull/101', created: false, branch: 'unchanged' });
         expect(github.refs.get('heads/sentry-fix/oncourse-web-3k')).toBe(head);
-        expect(github.calls).toEqual(['update #101', 'addLabels #101 sentry-autofix']);
+        expect(github.calls).toEqual(['update #101', 'addLabels #101 sentry-autofix,sentry']);
         expect(github.prs).toHaveLength(1);
         expect(posted).toHaveLength(1);
     });

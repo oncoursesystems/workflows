@@ -1,5 +1,6 @@
 export const LABELS = {
     autofix: { name: 'sentry-autofix', color: 'd73a4a', description: 'Opened by sentry-fix for a production Sentry issue' },
+    sentry: { name: 'sentry', color: '362d59', description: 'Fixes an issue reported in Sentry' },
     merged: { name: 'sentry-fix-merged', color: 'fbca04', description: 'A sentry-fix pull request that waits for a release' },
     released: { name: 'sentry-fix-released', color: '0e8a16', description: 'A sentry-fix pull request that shipped in a release' },
     mismatch: { name: 'sentry-fix-mismatch', color: 'b60205', description: 'A sentry-fix pull request whose marker and branch disagree, so no release resolves it' },

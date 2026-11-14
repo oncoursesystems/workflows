@@ -87,7 +87,7 @@ async function findOpenPr(octokit: Octokit, repo: RepoRef, branch: string) {
 
 export async function publishPr(options: PublishOptions, planned: PlannedIssue, output: FixOutput, changes: readonly ChangedFile[]) {
     const { octokit, repo } = options;
-    await ensureLabels(octokit, repo, [LABELS.autofix]);
+    await ensureLabels(octokit, repo, [LABELS.autofix, LABELS.sentry]);
     const branch = branchName(planned.context.issue.shortId);
     const { tree, message } = await commitChanges(octokit, repo, planned, output, changes);
     const open = await findOpenPr(octokit, repo, branch);
@@ -105,7 +105,7 @@ export async function publishPr(options: PublishOptions, planned: PlannedIssue, 
         const { data: created } = await octokit.rest.pulls.create({ ...repo, title: output.commitTitle, body, head: branch, base: info.default_branch, draft: false });
         pr = { number: created.number, url: created.html_url, created: true };
     }
-    await octokit.rest.issues.addLabels({ ...repo, issue_number: pr.number, labels: [LABELS.autofix.name] });
+    await octokit.rest.issues.addLabels({ ...repo, issue_number: pr.number, labels: [LABELS.autofix.name, LABELS.sentry.name] });
     return { ...pr, branch: update };
 }
 export async function publish(planned: PlannedIssue, result: FixResult, options: PublishOptions): Promise<Published> {
