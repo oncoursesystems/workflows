@@ -106,7 +106,7 @@ jobs:
           plan-file: ${{ runner.temp }}/sentry-fix-plan/plan.json
           plan-sha256: ${{ needs.plan.outputs.plan-sha256 }}
           issue-id: ${{ matrix.issue.id }}
-          out-dir: ${{ runner.temp }}/sentry-fix/${{ matrix.issue.id }}
+          out-dir: ${{ runner.temp }}/sentry-fix
           claude-code-oauth-token: ${{ secrets.claude-code-oauth-token }}
 
       - name: Keep the result for the publish job
@@ -114,7 +114,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: sentry-fix-result-${{ matrix.issue.id }}
-          path: ${{ runner.temp }}/sentry-fix/${{ matrix.issue.id }}
+          path: ${{ runner.temp }}/sentry-fix
           if-no-files-found: ignore
           retention-days: 14
 
@@ -136,6 +136,8 @@ jobs:
         with:
           pattern: sentry-fix-result-*
           path: ${{ runner.temp }}/sentry-fix
+          # A pattern that matches one artifact extracts it without its folder, so each artifact carries its own.
+          merge-multiple: true
 
       - name: Publish the results
         uses: oncoursesystems/workflows/.github/actions/sentry-fix-publish@main
