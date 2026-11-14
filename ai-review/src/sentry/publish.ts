@@ -108,8 +108,13 @@ export async function publishPr(options: PublishOptions, planned: PlannedIssue, 
 }
 export async function publish(planned: PlannedIssue, result: FixResult, options: PublishOptions): Promise<Published> {
     if (result.status === 'failed') return { kind: 'not-published', reason: `the fixer did not finish: ${result.error}` };
-    const { output, changes } = result;
     const issue = planned.context.issue;
+    const mark = { kind: 'no-fix', date: noteDate(options.now), run: options.run } as const;
+    if (result.status === 'exhausted') {
+        await noteOnce(options.sentry, issue.id, mark, noFixNote(mark, [result.reason]));
+        return { kind: 'no-fix', reasons: [result.reason] };
+    }
+    const { output, changes } = result;
     const project = projectOf(options.config, issue.project);
     if (project === undefined) return { kind: 'not-published', reason: `${issue.project} is no longer in the config` };
 
@@ -117,7 +122,6 @@ export async function publish(planned: PlannedIssue, result: FixResult, options:
     const again = gate({ output, verification: result.verification, changes, project });
     const reasons = [...new Set([...(result.gate.open ? [] : result.gate.reasons), ...(again.open ? [] : again.reasons)])];
     if (reasons.length > 0) {
-        const mark = { kind: 'no-fix', date: noteDate(options.now), run: options.run } as const;
         await noteOnce(options.sentry, issue.id, mark, noFixNote(mark, reasons, output, result.verification));
         return { kind: 'no-fix', reasons };
     }

@@ -63,6 +63,7 @@ export async function runFixer(options: FixerOptions): Promise<FixResult> {
     } catch (error) {
         return { status: 'failed', error: `the session container failed: ${errorText(error)}` };
     }
+    if (session.status === 'exhausted') return { status: 'exhausted', reason: `The fixer ran out of budget or turns before it found a fix: ${session.error}` };
     if (session.status !== 'done') return { status: 'failed', error: session.error };
 
     let verification: CommandRun[] = [];

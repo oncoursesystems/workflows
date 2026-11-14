@@ -145,6 +145,15 @@ describe('runFixer', () => {
         });
     });
 
+    it('reports a session that ran out of budget or turns as exhausted, which is a no-fix', async () => {
+        const { containers, verified } = agent(() => {}, { status: 'exhausted', error: 'claude-opus-5-5 stopped with error_max_budget_usd: over budget' });
+        await expect(runFixer({ planned, cwd: dir, containers, secrets: () => [] })).resolves.toEqual({
+            status: 'exhausted',
+            reason: 'The fixer ran out of budget or turns before it found a fix: claude-opus-5-5 stopped with error_max_budget_usd: over budget',
+        });
+        expect(verified).toEqual([]);
+    });
+
     it('reports a session container that broke as failed', async () => {
         const containers: Containers = {
             session: async () => {

@@ -106,12 +106,16 @@ const GateData = z.union([z.object({ open: z.literal(true) }), z.object({ open: 
 
 // Code in the fix job can rewrite this file, so it carries only what the fixer produced. The publish job takes
 // the issue, the project and the base commit from the plan job's output.
+// failed is an infrastructure error, retried next week with no note. exhausted is the fixer running out of budget,
+// turns or time, which is a no-fix.
 export type FixResult =
     | { status: 'failed'; error: string }
+    | { status: 'exhausted'; reason: string }
     | { status: 'done'; output: FixOutput; verification: CommandRun[]; gate: Gate; changes: ChangedFile[]; stats: FixStats };
 
 export const FixResult = z.discriminatedUnion('status', [
     z.object({ status: z.literal('failed'), error: z.string() }),
+    z.object({ status: z.literal('exhausted'), reason: z.string() }),
     z.object({
         status: z.literal('done'),
         output: FixOutput,

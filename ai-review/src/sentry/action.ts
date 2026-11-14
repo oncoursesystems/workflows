@@ -123,6 +123,10 @@ async function fixCommand(): Promise<void> {
         core.warning(`${shortId}: the fixer did not finish, so nothing is published for it: ${result.error}`);
         return;
     }
+    if (result.status === 'exhausted') {
+        core.info(`${shortId}: ${result.reason} It gets a no-fix note.`);
+        return;
+    }
     const verdict = result.gate.open ? 'a pull request' : `a no-fix note (${result.gate.reasons.join(' ')})`;
     core.info(`${shortId}: ${result.output.outcome} at ${result.output.confidence} confidence, for ${verdict}.`);
     core.info(`${result.stats.billing}, $${result.stats.costUsd.toFixed(2)}, ${result.stats.turns} turns. Denied: ${result.stats.denied.join(', ') || 'none'}.`);

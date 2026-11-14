@@ -3,6 +3,7 @@ import type { SentryFixConfig } from './config.ts';
 import { FakeGitHub, PERSON } from './fake-github.ts';
 import type { FixOutput } from './fix.ts';
 import type { ChangedFile, FixResult, PlannedIssue } from './handoff.ts';
+import { sentryFixNotes } from './plan.ts';
 import { publish } from './publish.ts';
 import { fakeSentry, issueContextOf, sentryIssue, type SentryCall } from './testing.ts';
 
@@ -175,6 +176,15 @@ describe('publish', () => {
         const { posted, options } = setup(['[sentry-fix] no-fix 2026-11-12 run 777\n\nfirst attempt of this run']);
         await publish(planned, done({ output: { ...output, outcome: 'no-fix' } }), options);
         expect(posted).toEqual([]);
+    });
+
+    it('notes a fixer that ran out of budget or turns as a no-fix, so the issue is not retried every week', async () => {
+        const { github, posted, options } = setup();
+        const reason = 'The fixer ran out of budget or turns before it found a fix: claude-opus-5-5 stopped with error_max_turns';
+        expect(await publish(planned, { status: 'exhausted', reason }, options)).toEqual({ kind: 'no-fix', reasons: [reason] });
+        expect(github.calls).toEqual([]);
+        expect(posted).toEqual([`[sentry-fix] no-fix 2026-11-13 run 777\n\nsentry-fix found no confident fix, so it opened no pull request.\n\n- ${reason}\n`]);
+        expect(sentryFixNotes(posted)).toEqual([{ kind: 'no-fix', date: '2026-11-13', run: '777' }]);
     });
 
     it('publishes nothing and notes nothing when the fixer did not finish', async () => {
