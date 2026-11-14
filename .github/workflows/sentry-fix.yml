@@ -74,6 +74,7 @@ jobs:
       issues: ${{ steps.plan.outputs.issues }}
       count: ${{ steps.plan.outputs.count }}
       sha: ${{ steps.plan.outputs.sha }}
+      plan-sha256: ${{ steps.plan.outputs.plan-sha256 }}
     steps:
       - name: Plan the issues to attempt
         id: plan
@@ -85,11 +86,21 @@ jobs:
           typesafe-api-key: ${{ secrets.typesafe-api-key }}
           config-path: ${{ inputs.config-path }}
           dry-run: ${{ inputs.dry-run }}
+          plan-dir: ${{ runner.temp }}/sentry-fix-plan
+
+      - name: Keep the plan for the fix and publish jobs
+        if: steps.plan.outputs.count != '' && steps.plan.outputs.count != '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sentry-fix-plan
+          path: ${{ runner.temp }}/sentry-fix-plan/plan.json
+          if-no-files-found: error
+          retention-days: 14
 
   fix:
     needs: plan
     if: needs.plan.outputs.count != '' && needs.plan.outputs.count != '0'
-    name: fix ${{ matrix.issue.context.issue.shortId }}
+    name: fix ${{ matrix.issue.shortId }}
     runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 60
     permissions:
@@ -107,11 +118,19 @@ jobs:
           ref: ${{ needs.plan.outputs.sha }}
           persist-credentials: false
 
+      - name: Download the plan
+        uses: actions/download-artifact@v8
+        with:
+          name: sentry-fix-plan
+          path: ${{ runner.temp }}/sentry-fix-plan
+
       - name: Fix the issue
         uses: oncoursesystems/workflows/.github/actions/sentry-fix-run@main
         with:
-          issue: ${{ toJSON(matrix.issue) }}
-          out-dir: ${{ runner.temp }}/sentry-fix/${{ matrix.issue.context.issue.id }}
+          plan-file: ${{ runner.temp }}/sentry-fix-plan/plan.json
+          plan-sha256: ${{ needs.plan.outputs.plan-sha256 }}
+          issue-id: ${{ matrix.issue.id }}
+          out-dir: ${{ runner.temp }}/sentry-fix/${{ matrix.issue.id }}
           claude-code-oauth-token: ${{ secrets.claude-code-oauth-token }}
           anthropic-federation-rule-id: ${{ inputs.anthropic-federation-rule-id }}
           anthropic-organization-id: ${{ inputs.anthropic-organization-id }}
@@ -125,8 +144,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: sentry-fix-${{ matrix.issue.context.issue.id }}
-          path: ${{ runner.temp }}/sentry-fix/${{ matrix.issue.context.issue.id }}
+          name: sentry-fix-result-${{ matrix.issue.id }}
+          path: ${{ runner.temp }}/sentry-fix/${{ matrix.issue.id }}
           if-no-files-found: ignore
           retention-days: 14
 
@@ -137,16 +156,23 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Download the plan
+        uses: actions/download-artifact@v8
+        with:
+          name: sentry-fix-plan
+          path: ${{ runner.temp }}/sentry-fix-plan
+
       - name: Download the fixer results
         uses: actions/download-artifact@v8
         with:
-          pattern: sentry-fix-*
+          pattern: sentry-fix-result-*
           path: ${{ runner.temp }}/sentry-fix
 
       - name: Publish the results
         uses: oncoursesystems/workflows/.github/actions/sentry-fix-publish@main
         with:
-          issues: ${{ needs.plan.outputs.issues }}
+          plan-file: ${{ runner.temp }}/sentry-fix-plan/plan.json
+          plan-sha256: ${{ needs.plan.outputs.plan-sha256 }}
           results-dir: ${{ runner.temp }}/sentry-fix
           bot-client-id: ${{ inputs.bot-client-id }}
           bot-app-private-key: ${{ secrets.bot-app-private-key }}

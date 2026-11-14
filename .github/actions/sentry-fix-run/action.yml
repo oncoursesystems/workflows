@@ -4,8 +4,14 @@ description: >
   gate, and write the result for the publish job. It holds no GitHub or Sentry token.
 
 inputs:
-  issue:
-    description: One planned issue, as JSON from the sentry-fix-plan output.
+  plan-file:
+    description: The plan file from the sentry-fix-plan artifact.
+    required: true
+  plan-sha256:
+    description: SHA-256 of the plan file, from the sentry-fix-plan output.
+    required: true
+  issue-id:
+    description: Sentry issue id of the planned issue to fix.
     required: true
   out-dir:
     description: Directory the result is written to.
@@ -67,7 +73,9 @@ runs:
       shell: bash
       env:
         INPUT_COMMAND: fix
-        INPUT_ISSUE: ${{ inputs.issue }}
+        INPUT_PLAN-FILE: ${{ inputs.plan-file }}
+        INPUT_PLAN-SHA256: ${{ inputs.plan-sha256 }}
+        INPUT_ISSUE-ID: ${{ inputs.issue-id }}
         INPUT_OUT-DIR: ${{ inputs.out-dir }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
         INPUT_ANTHROPIC-FEDERATION-RULE-ID: ${{ inputs.anthropic-federation-rule-id }}

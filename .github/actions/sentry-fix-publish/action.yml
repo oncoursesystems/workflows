@@ -4,11 +4,14 @@ description: >
   the bot token, and post a note on every attempted Sentry issue. It runs no repository code.
 
 inputs:
-  issues:
-    description: The planned issues, as JSON from the sentry-fix-plan output. The issue, its project and the base commit come from here, not from the results.
+  plan-file:
+    description: The plan file from the sentry-fix-plan artifact. The issue, its project and the base commit come from here, not from the results.
+    required: true
+  plan-sha256:
+    description: SHA-256 of the plan file, from the sentry-fix-plan output.
     required: true
   results-dir:
-    description: Directory with a sentry-fix-<issue id> sub-directory per fixer result.
+    description: Directory with a sentry-fix-result-<issue id> sub-directory per fixer result.
     required: true
   bot-client-id:
     description: Client ID of the GitHub App that pushes the branch and opens the pull request.
@@ -50,7 +53,8 @@ runs:
       shell: bash
       env:
         INPUT_COMMAND: publish
-        INPUT_ISSUES: ${{ inputs.issues }}
+        INPUT_PLAN-FILE: ${{ inputs.plan-file }}
+        INPUT_PLAN-SHA256: ${{ inputs.plan-sha256 }}
         INPUT_RESULTS-DIR: ${{ inputs.results-dir }}
         INPUT_BOT-TOKEN: ${{ steps.bot.outputs.token }}
         INPUT_SENTRY-TOKEN: ${{ inputs.sentry-token }}

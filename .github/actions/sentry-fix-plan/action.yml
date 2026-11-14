@@ -24,6 +24,9 @@ inputs:
     description: Print the walk to the job summary and output no issues.
     required: false
     default: 'false'
+  plan-dir:
+    description: Directory the plan file is written to, for the workflow to upload as an artifact.
+    required: true
   jev-model:
     description: Jev model ID. Pin a version, because the thresholds are tuned against one version.
     required: false
@@ -31,8 +34,11 @@ inputs:
 
 outputs:
   issues:
-    description: JSON array of the planned issues. Empty on a dry run.
+    description: JSON array of the id and shortId of each planned issue, for the fix matrix. Empty on a dry run.
     value: ${{ steps.plan.outputs.issues }}
+  plan-sha256:
+    description: SHA-256 of the plan file, which the fix and publish jobs check before they trust it.
+    value: ${{ steps.plan.outputs.plan-sha256 }}
   count:
     description: Number of planned issues.
     value: ${{ steps.plan.outputs.count }}
@@ -64,4 +70,5 @@ runs:
         INPUT_CONFIG-PATH: ${{ inputs.config-path }}
         INPUT_DRY-RUN: ${{ inputs.dry-run }}
         INPUT_JEV-MODEL: ${{ inputs.jev-model }}
+        INPUT_PLAN-DIR: ${{ inputs.plan-dir }}
       run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/sentry/action.ts"

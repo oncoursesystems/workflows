@@ -9,8 +9,7 @@ import { DEFAULT_CONFIG_PATH } from './config.ts';
 import { agentEnv, CLAUDE_AUTH_VARIABLE } from './env.ts';
 import { runFixer } from './fixer.ts';
 import { defaultBranchHead, requireConfig } from './github.ts';
-import { z } from 'zod';
-import { fitPlan, FixResult, parseJson, PlannedIssue, readJson } from './handoff.ts';
+import { encodePlan, FixResult, PLAN_FILE, plannedIssue, readJson, readPlan } from './handoff.ts';
 import { onMerged } from './merged.ts';
 import { plan } from './plan.ts';
 import { publish } from './publish.ts';
@@ -23,7 +22,9 @@ import type { SentryOptions } from './sentry.ts';
 const RESULT_FILE = 'result.json';
 
 // The workflow uploads each fix job's result as this artifact, and download-artifact puts it in a directory of the same name.
-const artifactName = (issueId: string): string => `sentry-fix-${issueId}`;
+const artifactName = (issueId: string): string => `sentry-fix-result-${issueId}`;
+
+const readPlanInput = () => readPlan(core.getInput('plan-file', { required: true }), core.getInput('plan-sha256', { required: true }));
 
 function sentryOptions(): SentryOptions {
     const token = core.getInput('sentry-token', { required: true });
@@ -52,9 +53,13 @@ async function planCommand(): Promise<void> {
     const table = renderWalk(result, config, dryRun);
     core.info(table);
     await core.summary.addRaw(table).write();
-    const planned = dryRun ? [] : fitPlan(result.planned);
-    core.setOutput('issues', JSON.stringify(planned));
-    core.setOutput('count', String(planned.length));
+    const encoded = encodePlan(dryRun ? [] : result.planned);
+    const dir = core.getInput('plan-dir', { required: true });
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, PLAN_FILE), encoded.bytes);
+    core.setOutput('plan-sha256', encoded.sha256);
+    core.setOutput('issues', JSON.stringify(encoded.keys));
+    core.setOutput('count', String(encoded.keys.length));
     core.setOutput('sha', head.sha);
 }
 
@@ -69,7 +74,7 @@ function readFederation(): Federation | undefined {
 }
 
 async function fixCommand(): Promise<void> {
-    const planned = parseJson(core.getInput('issue', { required: true }), PlannedIssue, 'the issue input');
+    const planned = plannedIssue(await readPlanInput(), core.getInput('issue-id', { required: true }));
     const out = core.getInput('out-dir', { required: true });
     const federation = readFederation();
     const minted: string[] = [];
@@ -111,7 +116,7 @@ async function publishCommand(): Promise<void> {
     const head = await defaultBranchHead(octokit, context.repo);
     const config = await requireConfig(octokit, context.repo, head.branch, configPath());
     const dir = core.getInput('results-dir', { required: true });
-    const issues = parseJson(core.getInput('issues', { required: true }), z.array(PlannedIssue), 'the issues input');
+    const issues = await readPlanInput();
     const lines: string[] = [];
     let failures = 0;
     for (const planned of issues) {

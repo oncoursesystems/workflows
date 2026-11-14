@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { describeIssues } from '../jev/response.ts';
@@ -48,18 +49,31 @@ export const PlannedIssue = z.object({
     context: IssueContextData,
 }) satisfies z.ZodType<PlannedIssue>;
 
-// The publish job reads every planned issue from one environment variable, and Linux caps one at 128 KiB.
-export const PLAN_OUTPUT_LIMIT = 100_000;
+// The plan reaches the fix and publish jobs as an artifact. Only its hash and the issue keys go through job
+// outputs, which GitHub keeps out of reach of the jobs that read them, so each reader checks the bytes it got.
+export const PLAN_FILE = 'plan.json';
 
-// Frames are the bulk of an issue, so every issue keeps fewer of them until the plan fits in one variable.
-export function fitPlan(planned: readonly PlannedIssue[], limit = PLAN_OUTPUT_LIMIT): PlannedIssue[] {
-    let frames = Math.max(0, ...planned.map((issue) => issue.context.frames.length));
-    for (;;) {
-        const fitted = planned.map((issue) => ({ ...issue, context: { ...issue.context, frames: issue.context.frames.slice(0, frames) } }));
-        if (JSON.stringify(fitted).length <= limit) return fitted;
-        if (frames === 0) throw new Error(`the plan is ${JSON.stringify(fitted).length} characters without frames, over the ${limit} limit; lower the limit`);
-        frames = Math.floor(frames / 2);
-    }
+export type PlanKey = { id: string; shortId: string };
+
+export const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+
+export function encodePlan(planned: readonly PlannedIssue[]): { bytes: Buffer; sha256: string; keys: PlanKey[] } {
+    const bytes = Buffer.from(JSON.stringify(planned), 'utf8');
+    return { bytes, sha256: sha256(bytes), keys: planned.map(({ context: { issue } }) => ({ id: issue.id, shortId: issue.shortId })) };
+}
+
+export function decodePlan(bytes: Uint8Array, expected: string): PlannedIssue[] {
+    const actual = sha256(bytes);
+    if (actual !== expected.toLowerCase()) throw new Error(`the plan file has SHA-256 ${actual}, but the plan job wrote ${expected}`);
+    return parseJson(Buffer.from(bytes).toString('utf8'), z.array(PlannedIssue), 'the plan file');
+}
+
+export const readPlan = async (path: string, expected: string): Promise<PlannedIssue[]> => decodePlan(await readFile(path), expected);
+
+export function plannedIssue(plan: readonly PlannedIssue[], id: string): PlannedIssue {
+    const found = plan.find((planned) => planned.context.issue.id === id);
+    if (found === undefined) throw new Error(`the plan has no issue ${id}`);
+    return found;
 }
 
 export type ChangedFile = Change & { content: string | null };
