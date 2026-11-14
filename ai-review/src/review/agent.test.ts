@@ -19,7 +19,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
     },
 }));
 
-const { runAgent, runAgentWithApiFallback, UsageLimitError } = await import('./agent.ts');
+const { runAgent, runAgentWithApiFallback, SessionLimitError, UsageLimitError } = await import('./agent.ts');
 
 const request = {
     model: 'claude-sonnet-5-5',
@@ -63,6 +63,20 @@ describe('runAgent', () => {
         const failure = runAgent(request);
         await expect(failure).rejects.toBeInstanceOf(UsageLimitError);
         await expect(failure).rejects.toThrow("Claude hit its five_hour limit: You've hit your limit · resets 9pm (UTC)");
+    });
+
+    it.each(['error_max_turns', 'error_max_budget_usd'])('reports %s as a session limit', async (subtype) => {
+        messages = [result({ subtype, errors: ['out'] })];
+        const failure = runAgent(request);
+        await expect(failure).rejects.toBeInstanceOf(SessionLimitError);
+        await expect(failure).rejects.toThrow(`claude-sonnet-5-5 stopped with ${subtype}: out`);
+    });
+
+    it('reports another failed subtype as a plain error', async () => {
+        messages = [result({ subtype: 'error_during_execution', errors: ['boom'] })];
+        const failure = runAgent(request);
+        await expect(failure).rejects.not.toBeInstanceOf(SessionLimitError);
+        await expect(failure).rejects.toThrow('claude-sonnet-5-5 stopped with error_during_execution: boom');
     });
 
     it('reports any other error result with its message', async () => {

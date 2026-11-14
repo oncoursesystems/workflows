@@ -43,6 +43,13 @@ export class UsageLimitError extends Error {
     override name = 'UsageLimitError';
 }
 
+// The session used up the turns or the budget the request gave it. Retrying the same request ends the same way.
+export class SessionLimitError extends Error {
+    override name = 'SessionLimitError';
+}
+
+const SESSION_LIMITS = new Set(['error_max_turns', 'error_max_budget_usd']);
+
 const deniedCall = ({ tool_name, tool_input }: { tool_name: string; tool_input: Record<string, unknown> }): string =>
     typeof tool_input['command'] === 'string' ? `${tool_name}(${tool_input['command']})` : tool_name;
 
@@ -107,7 +114,8 @@ async function runSession<T>(request: AgentRequest<T>, auth: Auth): Promise<Agen
         }
         if (message.type !== 'result') continue;
         if (message.subtype !== 'success') {
-            throw new Error(`${request.model} stopped with ${message.subtype}: ${message.errors.join('; ')}`);
+            const text = `${request.model} stopped with ${message.subtype}: ${message.errors.join('; ')}`;
+            throw SESSION_LIMITS.has(message.subtype) ? new SessionLimitError(text) : new Error(text);
         }
         if (limit !== undefined) throw new UsageLimitError(`Claude hit its ${limit} limit: ${message.result}`);
         if (message.is_error) throw new Error(`${request.model} stopped with an error: ${message.result}`);
