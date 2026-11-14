@@ -37,14 +37,24 @@ export type MergedFix = { number: number; mergeCommitSha: string | null; issueId
 export const fixesInRange = (fixes: readonly MergedFix[], shas: ReadonlySet<string>): MergedFix[] =>
     fixes.filter((fix) => fix.mergeCommitSha !== null && shas.has(fix.mergeCommitSha));
 
+export async function commitDate(octokit: Octokit, repo: RepoRef, ref: string): Promise<Date | undefined> {
+    const { data } = await octokit.rest.repos.getCommit({ ...repo, ref });
+    const date = data.commit.committer?.date;
+    return date === undefined ? undefined : new Date(date);
+}
+
 // The merged label is only a marker for people. A merge hook that never ran must not leave a fix unreleased.
-async function mergedFixes(octokit: Octokit, repo: RepoRef): Promise<MergedFix[]> {
+// A pull request merged after the tag's commit cannot be in the release, so it costs no pulls.get call.
+async function mergedFixes(octokit: Octokit, repo: RepoRef, tagDate: Date | undefined): Promise<MergedFix[]> {
     const items = await octokit.paginate(octokit.rest.issues.listForRepo, { ...repo, labels: LABELS.autofix.name, state: 'closed', per_page: 100 });
     const fixes: MergedFix[] = [];
     for (const item of items) {
         const issueId = markedIssueId(item.body);
-        if (!item.pull_request?.merged_at || issueId === undefined) continue;
-        if (hasLabel(labelNames(item.labels), LABELS.released.name)) continue;
+        const mergedAt = item.pull_request?.merged_at;
+        if (!mergedAt || issueId === undefined) continue;
+        const labels = labelNames(item.labels);
+        if (hasLabel(labels, LABELS.released.name) || hasLabel(labels, LABELS.mismatch.name)) continue;
+        if (tagDate !== undefined && new Date(mergedAt) > tagDate) continue;
         const { data: pr } = await octokit.rest.pulls.get({ ...repo, pull_number: item.number });
         fixes.push({ number: item.number, mergeCommitSha: pr.merged ? pr.merge_commit_sha : null, issueId, headRef: pr.head.ref });
     }
@@ -62,6 +72,8 @@ async function resolveFix(options: ResolveOptions, app: AppConfig, release: stri
     const issue = await fetchIssue(sentry, fix.issueId);
     const outcome = { number: fix.number, issueId: fix.issueId, shortId: issue.shortId };
     if (!markerMatchesBranch(fix.headRef, issue.shortId)) {
+        await ensureLabels(octokit, repo, [LABELS.mismatch]);
+        await applyLabelChange(octokit, repo, fix.number, { add: [LABELS.mismatch.name], remove: [] });
         return { ...outcome, status: 'mismatch', reason: `skipped, because its marker names ${issue.shortId} but its branch is ${fix.headRef}` };
     }
     if (!app.projects.includes(issue.project)) return { ...outcome, status: 'skipped', reason: `${issue.project} does not report ${app.name}` };
@@ -75,7 +87,8 @@ export async function resolveRelease(options: ResolveOptions): Promise<{ release
     const { octokit, repo, config, input } = options;
     const release = releaseName(config, input);
     const app = appOf(config, input.app)!;
-    const shipped = fixesInRange(await mergedFixes(octokit, repo), await commitsBetween(octokit, repo, input.previousTag, input.tag));
+    const tagDate = await commitDate(octokit, repo, input.tag);
+    const shipped = fixesInRange(await mergedFixes(octokit, repo, tagDate), await commitsBetween(octokit, repo, input.previousTag, input.tag));
     const outcomes: ResolveOutcome[] = [];
     if (shipped.length > 0) await ensureLabels(octokit, repo, [LABELS.released]);
     for (const fix of shipped) {

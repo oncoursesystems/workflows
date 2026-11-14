@@ -121,8 +121,24 @@ describe('resolveRelease', () => {
             status: 'mismatch',
             reason: 'skipped, because its marker names S-11 but its branch is sentry-fix/s-77',
         });
-        expect(github.prs.find((pr) => pr.number === 5)?.labels).toEqual(['sentry-autofix', 'sentry-fix-merged']);
+        expect(github.prs.find((pr) => pr.number === 5)?.labels).toEqual(['sentry-autofix', 'sentry-fix-merged', 'sentry-fix-mismatch']);
+        expect(github.repoLabels).toContain('sentry-fix-mismatch');
         expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(2);
+
+        github.calls = [];
+        github.compareCommits = ['m6'];
+        await resolveRelease({ octokit: github.octokit, repo, sentry, config, input: { ...input, tag: 't2', previousTag: 't' } });
+        expect(github.calls).not.toContain('get #5');
+    });
+
+    it('never fetches a pull request merged after the commit the tag points at', async () => {
+        const { github, sentry, merged } = setup();
+        github.commitDates.set('2026.11.13.1200', '2026-11-13T12:00:00Z');
+        merged(9, 'm9', '14', 'sentry-fix/s-14', ['sentry-autofix', 'sentry-fix-merged']).mergedAt = '2026-11-13T12:00:01Z';
+        const input = { app: 'web', version: '1', release: '', tag: '2026.11.13.1200', previousTag: 'p' };
+        const { outcomes } = await resolveRelease({ octokit: github.octokit, repo, sentry, config, input });
+        expect(github.calls.filter((call) => call.startsWith('get #'))).toEqual(['get #1', 'get #2', 'get #3', 'get #4']);
+        expect(outcomes.map((outcome) => outcome.number)).toEqual([1, 2, 4]);
     });
 
     it('keeps going past a pull request that fails, and fails the step only when every one failed', async () => {

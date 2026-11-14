@@ -11,6 +11,7 @@ export type FakePr = {
     head: string;
     base: string;
     mergeCommitSha: string | null;
+    mergedAt: string;
     files: string[];
 };
 
@@ -31,6 +32,7 @@ export class FakeGitHub {
     trees = new Map<string, { base: string | undefined; entries: Array<{ path: string; mode: string; sha: string | null }> }>();
     commits = new Map<string, FakeCommit>([['a'.repeat(40), { message: 'base', tree: 't0', parents: [] }]]);
     compareCommits: string[] = [];
+    commitDates = new Map<string, string>();
     calls: string[] = [];
 
     pr(fields: Partial<FakePr> & { number: number }): FakePr {
@@ -43,6 +45,7 @@ export class FakeGitHub {
             head: `branch-${fields.number}`,
             base: 'main',
             mergeCommitSha: null,
+            mergedAt: '2026-11-10T00:00:00Z',
             files: [],
             ...fields,
         };
@@ -88,6 +91,9 @@ export class FakeGitHub {
                     if (text === undefined) throw notFound();
                     return { data: { type: 'file', encoding: 'base64', content: Buffer.from(text).toString('base64') } };
                 },
+                getCommit: async ({ ref }: { ref: string }) => ({
+                    data: { commit: { committer: { date: this.commitDates.get(ref) ?? '2026-11-13T12:00:00Z' } } },
+                }),
                 compareCommitsWithBasehead: async ({ per_page, page }: { per_page: number; page: number }) => ({
                     data: { commits: this.compareCommits.slice((page - 1) * per_page, page * per_page).map((sha) => ({ sha })) },
                 }),
@@ -97,7 +103,7 @@ export class FakeGitHub {
                     data: this.prs
                         .filter((pr) => pr.labels.some((label) => label.toLowerCase() === labels.toLowerCase()))
                         .filter((pr) => state === 'all' || pr.state === state)
-                        .map((pr) => ({ ...this.prData(pr), pull_request: { merged_at: pr.merged ? '2026-11-10T00:00:00Z' : null } })),
+                        .map((pr) => ({ ...this.prData(pr), pull_request: { merged_at: pr.merged ? pr.mergedAt : null } })),
                 }),
                 listLabelsForRepo: async () => ({ data: this.repoLabels.map((name) => ({ name })) }),
                 createLabel: async ({ name }: { name: string }) => {
@@ -128,7 +134,10 @@ export class FakeGitHub {
                 listFiles: async ({ pull_number }: { pull_number: number }) => ({
                     data: this.find(pull_number).files.map((filename) => ({ filename, status: 'modified', additions: 1, deletions: 0, patch: '@@ +x' })),
                 }),
-                get: async ({ pull_number }: { pull_number: number }) => ({ data: this.prData(this.find(pull_number)) }),
+                get: async ({ pull_number }: { pull_number: number }) => {
+                    this.record(`get #${pull_number}`);
+                    return { data: this.prData(this.find(pull_number)) };
+                },
                 create: async ({ title, body, head, base, draft }: { title: string; body: string; head: string; base: string; draft: boolean }) => {
                     this.record(`create ${head} -> ${base}${draft ? ' draft' : ''}`);
                     const number = Math.max(100, ...this.prs.map((pr) => pr.number)) + 1;
