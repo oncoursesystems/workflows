@@ -61,6 +61,21 @@ export const BUILD_FILES = [
     '**/tsconfig.*.json',
     '**/app.json',
     '**/app.config.*',
+    '**/.yarnrc.yml',
+    '**/.pnpmfile.cjs',
+    '**/bunfig.toml',
+    '**/postcss.config.*',
+    '**/tailwind.config.*',
+    '**/rollup.config.*',
+    '**/playwright.config.*',
+    '**/cypress.config.*',
+    '**/.mocharc.*',
+    '**/*.runsettings',
+    '**/Makefile',
+    '**/*.ps1',
+    '**/*.cmd',
+    '**/*.bat',
+    '**/.husky/**',
 ];
 
 const POLICY_FILES = [
@@ -134,8 +149,10 @@ export function fixerSystemPrompt(project: ProjectConfig, rules: RepoRules): str
         `- Change files only under ${project.roots.map((root) => `\`${root}\``).join(', ')}. Never change .github/, ` +
             '.claude/, CLAUDE.md, AGENTS.md, REVIEW.md, review-policy.yml, CODEOWNERS, package manager config or lockfiles.',
         '- Never change a build file: package.json, project and solution files, .props and .targets files, global.json, ' +
-            'dotnet-tools.json, Dockerfiles, shell scripts, or webpack, vite, jest, eslint, babel, metro, tsconfig or app ' +
-            'configs. When the fix needs one, answer no-fix and say which file and why.',
+            'dotnet-tools.json, Dockerfiles, Makefiles, shell, PowerShell and batch scripts, .runsettings, .husky hooks, ' +
+            'package manager hooks such as .yarnrc.yml, .pnpmfile.cjs and bunfig.toml, or webpack, vite, rollup, postcss, ' +
+            'tailwind, jest, mocha, playwright, cypress, eslint, babel, metro, tsconfig or app configs. When the fix needs ' +
+            'one, answer no-fix and say which file and why.',
         '- Do not commit, push or create branches. Leave the change in the working tree. The workflow commits it.',
         '- Bash runs only these project commands. Run each one exactly as written, without cd, pipes or redirection, ' +
             'or it is denied. Git is not available to you; the workflow reads your changes from the working tree:',

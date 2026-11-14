@@ -153,9 +153,34 @@ describe('isProtected', () => {
         'client/web/tsconfig.app.json',
         'client/mobile/app.json',
         'client/mobile/app.config.ts',
+        '.yarnrc.yml',
+        'client/web/.pnpmfile.cjs',
+        'bunfig.toml',
+        'client/web/postcss.config.js',
+        'client/web/tailwind.config.ts',
+        'client/web/rollup.config.mjs',
+        'client/web/playwright.config.ts',
+        'client/web/cypress.config.js',
+        'client/web/.mocharc.yml',
+        'src/Tests/coverage.runsettings',
+        'Makefile',
+        'src/Makefile',
+        'scripts/build.ps1',
+        'scripts/build.cmd',
+        'scripts/build.bat',
+        '.husky/pre-commit',
+        'client/web/.husky/_/husky.sh',
     ])('protects the build file %s', (path) => expect(isProtected(path)).toBe(true));
 
-    it.each(['client/web/app/Grid.js', 'src/Web/Github.cs', 'docs/ai-review.md', 'client/web/app/package.js', 'src/Web/appsettings.json'])(
+    it.each([
+        'client/web/app/Grid.js',
+        'src/Web/Github.cs',
+        'docs/ai-review.md',
+        'client/web/app/package.js',
+        'src/Web/appsettings.json',
+        'src/Web/Makefiles.cs',
+        'client/web/app/batch.js',
+    ])(
         'lets %s through',
         (path) => expect(isProtected(path)).toBe(false),
     );
