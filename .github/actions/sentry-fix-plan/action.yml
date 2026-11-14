@@ -1,0 +1,67 @@
+name: Sentry fix plan
+description: >
+  Rank a repository's unresolved production Sentry issues by events in the period, skip the ineligible ones, and
+  output the issues for the fixer to attempt. Writes nothing to GitHub or Sentry.
+
+inputs:
+  github-token:
+    description: Token that reads the config on the default branch and lists pull requests.
+    required: true
+  sentry-token:
+    description: Sentry auth token with the event:read and project:read scopes.
+    required: true
+  sentry-org:
+    description: Sentry organization slug.
+    required: true
+  typesafe-api-key:
+    description: TypeSafe API key for the Jev triage.
+    required: true
+  config-path:
+    description: Path of the sentry-fix config, read from the default branch.
+    required: false
+    default: .github/sentry-fix.yml
+  dry-run:
+    description: Print the walk to the job summary and output no issues.
+    required: false
+    default: 'false'
+  jev-model:
+    description: Jev model ID. Pin a version, because the thresholds are tuned against one version.
+    required: false
+    default: jev-1.14.0
+
+outputs:
+  issues:
+    description: JSON array of the planned issues. Empty on a dry run.
+    value: ${{ steps.plan.outputs.issues }}
+  count:
+    description: Number of planned issues.
+    value: ${{ steps.plan.outputs.count }}
+  sha:
+    description: The default branch commit the plan was made at.
+    value: ${{ steps.plan.outputs.sha }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    - name: Install sentry-fix
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../../ai-review
+      run: npm ci --omit=dev --no-audit --no-fund
+
+    - name: Plan the issues to attempt
+      id: plan
+      shell: bash
+      env:
+        INPUT_COMMAND: plan
+        INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
+        INPUT_SENTRY-TOKEN: ${{ inputs.sentry-token }}
+        INPUT_SENTRY-ORG: ${{ inputs.sentry-org }}
+        INPUT_TYPESAFE-API-KEY: ${{ inputs.typesafe-api-key }}
+        INPUT_CONFIG-PATH: ${{ inputs.config-path }}
+        INPUT_DRY-RUN: ${{ inputs.dry-run }}
+        INPUT_JEV-MODEL: ${{ inputs.jev-model }}
+      run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/sentry/action.ts"

@@ -1,0 +1,36 @@
+name: Sentry fix merged
+description: >
+  On a closed pull request, when it merged and has the sentry-autofix label, add the sentry-fix-merged label and
+  post a merged note on its Sentry issue. Any other pull request is ignored.
+
+inputs:
+  github-token:
+    description: Token that creates and adds the label.
+    required: true
+  sentry-token:
+    description: Sentry auth token with the event:read and event:write scopes.
+    required: true
+  sentry-org:
+    description: Sentry organization slug.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    - name: Install sentry-fix
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../../ai-review
+      run: npm ci --omit=dev --no-audit --no-fund
+
+    - name: Mark the merge
+      shell: bash
+      env:
+        INPUT_COMMAND: merged
+        INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
+        INPUT_SENTRY-TOKEN: ${{ inputs.sentry-token }}
+        INPUT_SENTRY-ORG: ${{ inputs.sentry-org }}
+      run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/sentry/action.ts"

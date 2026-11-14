@@ -1,0 +1,77 @@
+name: Sentry fix run
+description: >
+  Run the Claude fixer on one planned Sentry issue in the checked-out repository, check its change against the
+  gate, and write the result for the publish job. It holds no GitHub or Sentry token.
+
+inputs:
+  issue:
+    description: One planned issue, as JSON from the sentry-fix-plan output.
+    required: true
+  out-dir:
+    description: Directory the result is written to.
+    required: true
+  claude-code-oauth-token:
+    description: Claude Code OAuth token the fixer runs on.
+    required: true
+  anthropic-federation-rule-id:
+    description: Workload identity federation rule to fall back on when the subscription hits a usage limit.
+    required: false
+  anthropic-organization-id:
+    description: Anthropic organization ID that owns the federation rule.
+    required: false
+  anthropic-service-account-id:
+    description: Service account the federation rule targets.
+    required: false
+  anthropic-workspace-id:
+    description: Workspace the API calls are billed to.
+    required: false
+  node-version:
+    description: Node.js version the project commands need. Set up after the fixer's own Node.js, so it comes first on PATH.
+    required: false
+  dotnet-version:
+    description: .NET SDK version the project commands need.
+    required: false
+  global-json-file:
+    description: global.json that names the .NET SDK the project commands need.
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    - name: Install sentry-fix
+      id: harness
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../../ai-review
+      run: |
+        npm ci --omit=dev --no-audit --no-fund
+        echo "node=$(command -v node)" >> "$GITHUB_OUTPUT"
+
+    - name: Set up the project's Node.js
+      if: inputs.node-version != ''
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Set up the project's .NET SDK
+      if: inputs.dotnet-version != '' || inputs.global-json-file != ''
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+        global-json-file: ${{ inputs.global-json-file }}
+
+    - name: Fix the issue
+      shell: bash
+      env:
+        INPUT_COMMAND: fix
+        INPUT_ISSUE: ${{ inputs.issue }}
+        INPUT_OUT-DIR: ${{ inputs.out-dir }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        INPUT_ANTHROPIC-FEDERATION-RULE-ID: ${{ inputs.anthropic-federation-rule-id }}
+        INPUT_ANTHROPIC-ORGANIZATION-ID: ${{ inputs.anthropic-organization-id }}
+        INPUT_ANTHROPIC-SERVICE-ACCOUNT-ID: ${{ inputs.anthropic-service-account-id }}
+        INPUT_ANTHROPIC-WORKSPACE-ID: ${{ inputs.anthropic-workspace-id }}
+      run: '"${{ steps.harness.outputs.node }}" --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/sentry/action.ts"'

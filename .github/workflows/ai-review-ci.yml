@@ -6,6 +6,8 @@ on:
       - "ai-review/**"
       - ".github/actions/risk-tier/**"
       - ".github/actions/ai-labeler/**"
+      - ".github/actions/sentry-fix-*/**"
+      - ".github/workflows/sentry-fix.yml"
       - ".github/workflows/ai-review-ci.yml"
   push:
     branches: [main]
@@ -13,6 +15,8 @@ on:
       - "ai-review/**"
       - ".github/actions/risk-tier/**"
       - ".github/actions/ai-labeler/**"
+      - ".github/actions/sentry-fix-*/**"
+      - ".github/workflows/sentry-fix.yml"
       - ".github/workflows/ai-review-ci.yml"
 
 permissions:

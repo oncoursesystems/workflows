@@ -1,0 +1,55 @@
+name: Sentry fix publish
+description: >
+  Publish the fixer results: commit each gated fix through the GitHub API, open or update its pull request with
+  the bot token, and post a note on every attempted Sentry issue. It runs no repository code.
+
+inputs:
+  results-dir:
+    description: Directory with one sub-directory per fixer result.
+    required: true
+  bot-client-id:
+    description: Client ID of the GitHub App that pushes the branch and opens the pull request.
+    required: true
+  bot-app-private-key:
+    description: Private key of that GitHub App.
+    required: true
+  sentry-token:
+    description: Sentry auth token with the event:read and event:write scopes.
+    required: true
+  sentry-org:
+    description: Sentry organization slug.
+    required: true
+  config-path:
+    description: Path of the sentry-fix config, read from the default branch.
+    required: false
+    default: .github/sentry-fix.yml
+
+runs:
+  using: composite
+  steps:
+    - name: Create the bot token
+      id: bot
+      uses: actions/create-github-app-token@v3
+      with:
+        client-id: ${{ inputs.bot-client-id }}
+        private-key: ${{ inputs.bot-app-private-key }}
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    - name: Install sentry-fix
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../../ai-review
+      run: npm ci --omit=dev --no-audit --no-fund
+
+    - name: Publish the results
+      shell: bash
+      env:
+        INPUT_COMMAND: publish
+        INPUT_RESULTS-DIR: ${{ inputs.results-dir }}
+        INPUT_BOT-TOKEN: ${{ steps.bot.outputs.token }}
+        INPUT_SENTRY-TOKEN: ${{ inputs.sentry-token }}
+        INPUT_SENTRY-ORG: ${{ inputs.sentry-org }}
+        INPUT_CONFIG-PATH: ${{ inputs.config-path }}
+      run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/sentry/action.ts"
