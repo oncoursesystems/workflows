@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FixOutput } from './fix.ts';
 import { runFixer, type Containers } from './fixer.ts';
-import type { PlannedIssue } from './handoff.ts';
+import type { CommandRun, PlannedIssue } from './handoff.ts';
 import type { SessionRequest, SessionResult } from './session.ts';
 import { issueContextOf } from './testing.ts';
 
@@ -47,16 +47,23 @@ describe('runFixer', () => {
 
     afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-    const agent = (edit: () => void, result: SessionResult = { status: 'done', output, stats }) => {
+    const passing = (commands: readonly string[]): CommandRun[] => commands.map((command) => ({ command, exitCode: 0, tail: 'ok' }));
+
+    const agent = (edit: () => void, result: SessionResult = { status: 'done', output, stats }, verify = passing) => {
         const requests: SessionRequest[] = [];
+        const verified: string[][] = [];
         const containers: Containers = {
             session: async (request) => {
                 requests.push(request);
                 edit();
                 return result;
             },
+            verify: async (commands) => {
+                verified.push([...commands]);
+                return verify(commands);
+            },
         };
-        return { containers, requests };
+        return { containers, requests, verified };
     };
 
     it('runs the fixer with its tools and env, and collects every change in the working tree', async () => {
@@ -72,7 +79,12 @@ describe('runFixer', () => {
             allowedTools: ['Read', 'Grep', 'Glob', 'Edit(./client/web/**)', 'Bash(npm test)'],
         });
         expect(requests[0]?.systemPrompt).toContain('Use 4 spaces.');
-        expect(result).toMatchObject({ status: 'done', gate: { open: true }, stats: { costUsd: 1.5, denied: ['Bash(curl x)'] } });
+        expect(result).toMatchObject({
+            status: 'done',
+            gate: { open: true },
+            verification: [{ command: 'npm test', exitCode: 0, tail: 'ok' }],
+            stats: { costUsd: 1.5, denied: ['Bash(curl x)'] },
+        });
         if (result.status !== 'done') return;
         expect(result.changes.map(({ path, status, content }) => [path, status, content && Buffer.from(content, 'base64').toString()])).toEqual([
             ['client/web/grid.js', 'modified', 'if (store) load();\n'],
@@ -108,11 +120,37 @@ describe('runFixer', () => {
         await expect(runFixer({ planned, cwd: dir, containers, secrets: () => [] })).resolves.toEqual({ status: 'failed', error: session.error });
     });
 
+    it("shuts the gate on the workflow's failed run, whatever Claude reported", async () => {
+        const failing = (commands: readonly string[]) => commands.map((command) => ({ command, exitCode: 1, tail: '1 failing' }));
+        const { containers } = agent(() => writeFileSync(join(dir, 'client/web/grid.js'), 'if (store) load();\n'), { status: 'done', output, stats }, failing);
+        const result = await runFixer({ planned, cwd: dir, containers, secrets: () => [] });
+        expect(result.status === 'done' && result.gate).toEqual({ open: false, reasons: ['`npm test` failed with exit code 1.'] });
+    });
+
+    it('runs no verification when Claude found no fix', async () => {
+        const noFix = { ...output, outcome: 'no-fix' as const, verification: [] };
+        const { containers, verified } = agent(() => {}, { status: 'done', output: noFix, stats });
+        const result = await runFixer({ planned, cwd: dir, containers, secrets: () => [] });
+        expect(verified).toEqual([]);
+        expect(result).toMatchObject({ status: 'done', verification: [], gate: { open: false } });
+    });
+
+    it('reports a verification container that broke as failed', async () => {
+        const { containers } = agent(() => {}, { status: 'done', output, stats }, () => {
+            throw new Error('the verification container did not start (125)');
+        });
+        await expect(runFixer({ planned, cwd: dir, containers, secrets: () => [] })).resolves.toEqual({
+            status: 'failed',
+            error: 'the verification container failed: the verification container did not start (125)',
+        });
+    });
+
     it('reports a session container that broke as failed', async () => {
         const containers: Containers = {
             session: async () => {
                 throw new Error('the session container exited with 125 and wrote no result');
             },
+            verify: async () => [],
         };
         await expect(runFixer({ planned, cwd: dir, containers, secrets: () => [] })).resolves.toEqual({
             status: 'failed',

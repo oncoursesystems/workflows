@@ -23,6 +23,8 @@ const fixed: FixOutput = {
     ],
 };
 
+const verified = project.commands.map((command) => ({ command, exitCode: 0, tail: 'ok' }));
+
 const change = (path: string, fields: Partial<Change> = {}): Change => ({ path, status: 'modified', mode: '100644', ...fields });
 
 const reasonsOf = (input: Parameters<typeof gate>[0]) => {
@@ -32,44 +34,58 @@ const reasonsOf = (input: Parameters<typeof gate>[0]) => {
 
 describe('gate', () => {
     it('opens for a confident, verified fix inside the roots', () => {
-        expect(gate({ output: fixed, changes: [change('client/web/app/Grid.js'), change('src/Web/A.cs', { status: 'added', mode: '100755' })], project })).toEqual({
+        expect(gate({ output: fixed, verification: verified, changes: [change('client/web/app/Grid.js'), change('src/Web/A.cs', { status: 'added', mode: '100755' })], project })).toEqual({
             open: true,
         });
     });
 
     it('opens for medium confidence', () => {
-        expect(gate({ output: { ...fixed, confidence: 'medium' }, changes: [change('client/web/a.js')], project }).open).toBe(true);
+        expect(gate({ output: { ...fixed, confidence: 'medium' }, verification: verified, changes: [change('client/web/a.js')], project }).open).toBe(true);
     });
 
     it('stays shut for no-fix or low confidence', () => {
-        expect(reasonsOf({ output: { ...fixed, outcome: 'no-fix' }, changes: [change('client/web/a.js')], project })).toEqual([
+        expect(reasonsOf({ output: { ...fixed, outcome: 'no-fix' }, verification: verified, changes: [change('client/web/a.js')], project })).toEqual([
             'Claude found no confident fix.',
         ]);
-        expect(reasonsOf({ output: { ...fixed, confidence: 'low' }, changes: [change('client/web/a.js')], project })).toEqual([
+        expect(reasonsOf({ output: { ...fixed, confidence: 'low' }, verification: verified, changes: [change('client/web/a.js')], project })).toEqual([
             'Claude rated its confidence low.',
         ]);
     });
 
-    it('stays shut when a command failed, none ran, or one is not a project command', () => {
-        const failed = { ...fixed, verification: [{ command: 'npm --prefix client/web test', passed: false }] };
-        expect(reasonsOf({ output: failed, changes: [change('client/web/a.js')], project })).toEqual(['`npm --prefix client/web test` failed.']);
-        expect(reasonsOf({ output: { ...fixed, verification: [] }, changes: [change('client/web/a.js')], project })).toEqual([
-            'No project command ran to verify the fix.',
+    it('stays shut when the workflow saw a command fail, not finish, or not run', () => {
+        const runs = [
+            { command: 'npm --prefix client/web test', exitCode: 1, tail: '1 failing' },
+            { command: 'npm --prefix client/web run lint', exitCode: null, tail: 'Stopped after 20 minutes.' },
+        ];
+        expect(reasonsOf({ output: fixed, verification: runs, changes: [change('client/web/a.js')], project })).toEqual([
+            '`npm --prefix client/web test` failed with exit code 1.',
+            '`npm --prefix client/web run lint` did not finish.',
         ]);
-        const invented = { ...fixed, verification: [{ command: 'echo ok', passed: true }] };
-        expect(reasonsOf({ output: invented, changes: [change('client/web/a.js')], project })).toEqual(['`echo ok` is not one of the project commands.']);
+        expect(reasonsOf({ output: fixed, verification: verified.slice(0, 1), changes: [change('client/web/a.js')], project })).toEqual([
+            '`npm --prefix client/web run lint` did not run.',
+        ]);
+    });
+
+    it("decides on the workflow's runs and never on Claude's own report", () => {
+        const claimed = { ...fixed, verification: [{ command: 'npm --prefix client/web test', passed: true }] };
+        const failing = [{ command: 'npm --prefix client/web test', exitCode: 2, tail: '' }, verified[1]!];
+        expect(reasonsOf({ output: claimed, verification: failing, changes: [change('client/web/a.js')], project })).toEqual([
+            '`npm --prefix client/web test` failed with exit code 2.',
+        ]);
+        const doubted = { ...fixed, verification: [{ command: 'echo ok', passed: false }] };
+        expect(gate({ output: doubted, verification: verified, changes: [change('client/web/a.js')], project }).open).toBe(true);
     });
 
     it('opens without verification when the project has no commands', () => {
-        expect(gate({ output: { ...fixed, verification: [] }, changes: [change('client/web/a.js')], project: { ...project, commands: [] } }).open).toBe(true);
+        expect(gate({ output: { ...fixed, verification: [] }, verification: [], changes: [change('client/web/a.js')], project: { ...project, commands: [] } }).open).toBe(true);
     });
 
     it('stays shut for an empty working tree', () => {
-        expect(reasonsOf({ output: fixed, changes: [], project })).toEqual(['The working tree has no changes.']);
+        expect(reasonsOf({ output: fixed, verification: verified, changes: [], project })).toEqual(['The working tree has no changes.']);
     });
 
     it('stays shut for a path outside the roots, including a sibling with the same prefix', () => {
-        expect(reasonsOf({ output: fixed, changes: [change('client/webby/a.js'), change('server/a.cs', { status: 'deleted' })], project })).toEqual([
+        expect(reasonsOf({ output: fixed, verification: verified, changes: [change('client/webby/a.js'), change('server/a.cs', { status: 'deleted' })], project })).toEqual([
             '`client/webby/a.js` is outside the project roots.',
             '`server/a.cs` is outside the project roots.',
         ]);
@@ -78,27 +94,27 @@ describe('gate', () => {
     it('stays shut for a protected path, even under a root', () => {
         const everywhere = { ...project, roots: ['.'] };
         const paths = ['.github/workflows/ci.yml', 'client/web/package-lock.json', 'CLAUDE.md', 'client/web/CLAUDE.md', 'REVIEW.md', 'review-policy.yml'];
-        expect(reasonsOf({ output: fixed, changes: paths.map((path) => change(path)), project: everywhere })).toEqual(
+        expect(reasonsOf({ output: fixed, verification: verified, changes: paths.map((path) => change(path)), project: everywhere })).toEqual(
             paths.map((path) => `\`${path}\` is protected.`),
         );
     });
 
     it('stays shut for a symlink or a submodule', () => {
-        expect(reasonsOf({ output: fixed, changes: [change('client/web/link', { mode: '120000' }), change('client/web/sub', { mode: '160000' })], project })).toEqual([
+        expect(reasonsOf({ output: fixed, verification: verified, changes: [change('client/web/link', { mode: '120000' }), change('client/web/sub', { mode: '160000' })], project })).toEqual([
             '`client/web/link` is not a regular file.',
             '`client/web/sub` is not a regular file.',
         ]);
     });
 
     it('stays shut when a changed file holds a credential', () => {
-        expect(reasonsOf({ output: fixed, changes: [change('client/web/a.js')], project, leaks: ['client/web/a.js'] })).toEqual([
+        expect(reasonsOf({ output: fixed, verification: verified, changes: [change('client/web/a.js')], project, leaks: ['client/web/a.js'] })).toEqual([
             '`client/web/a.js` contains a credential the fixer could see.',
         ]);
     });
 
     it('stays shut for a build file under a root, and says why', () => {
         const paths = ['client/web/package.json', 'src/Web/Web.csproj', 'src/Directory.Build.props', 'client/web/webpack.config.js', 'build.sh'];
-        expect(reasonsOf({ output: fixed, changes: paths.map((path) => change(path)), project: { ...project, roots: ['.'] } })).toEqual(
+        expect(reasonsOf({ output: fixed, verification: verified, changes: paths.map((path) => change(path)), project: { ...project, roots: ['.'] } })).toEqual(
             paths.map((path) => `\`${path}\` is a build file, which pull request CI runs before review, so sentry-fix may not change it.`),
         );
     });

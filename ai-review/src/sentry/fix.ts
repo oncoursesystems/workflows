@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { rulesSection, type RepoRules } from '../review/prompts.ts';
 import type { ProjectConfig } from './config.ts';
 import { frameLine, type IssueContext } from './context.ts';
+import type { CommandRun } from './handoff.ts';
 
 export const FIXER_MODEL = 'claude-opus-5-5';
 export const FIXER_BUDGET_USD = 10;
@@ -23,7 +24,7 @@ export const FixOutput = z.object({
     testAdded: z.string().nullable().describe('Repository path of the regression test, or null with the reason in the analysis'),
     verification: z
         .array(z.object({ command: z.string(), passed: z.boolean() }))
-        .describe('Each project command you ran after your last edit, exactly as listed, and whether it passed'),
+        .describe('Each project command you ran after your last edit, exactly as listed, and whether it passed. The workflow runs them again itself'),
 });
 
 export type FixOutput = z.infer<typeof FixOutput>;
@@ -180,20 +181,23 @@ export type Gate = { open: true } | { open: false; reasons: string[] };
 
 export type GateInput = {
     output: FixOutput;
+    // The workflow's own runs of the project commands. The agent's verification report never opens the gate.
+    verification: readonly CommandRun[];
     changes: readonly Change[];
     project: ProjectConfig;
     leaks?: readonly string[];
 };
 
-export function gate({ output, changes, project, leaks = [] }: GateInput): Gate {
+const runFailure = (run: CommandRun): string =>
+    run.exitCode === null ? `\`${run.command}\` did not finish.` : `\`${run.command}\` failed with exit code ${run.exitCode}.`;
+
+export function gate({ output, verification, changes, project, leaks = [] }: GateInput): Gate {
+    const ran = new Set(verification.map((run) => run.command));
     const reasons = [
         output.outcome === 'fixed' ? [] : ['Claude found no confident fix.'],
         output.confidence === 'low' ? ['Claude rated its confidence low.'] : [],
-        project.commands.length > 0 && output.verification.length === 0 ? ['No project command ran to verify the fix.'] : [],
-        output.verification.filter((run) => !run.passed).map((run) => `\`${run.command}\` failed.`),
-        output.verification
-            .filter((run) => !project.commands.includes(run.command))
-            .map((run) => `\`${run.command}\` is not one of the project commands.`),
+        output.outcome === 'fixed' ? project.commands.filter((command) => !ran.has(command)).map((command) => `\`${command}\` did not run.`) : [],
+        verification.filter((run) => run.exitCode !== 0).map(runFailure),
         changes.length === 0 ? ['The working tree has no changes.'] : [],
         changes.filter((change) => !insideRoots(change.path, project.roots)).map((change) => `\`${change.path}\` is outside the project roots.`),
         changes.filter((change) => isProtected(change.path)).map((change) => protectedReason(change.path)),

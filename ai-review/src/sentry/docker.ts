@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { containerEnv, dockerClientEnv, isVariableName } from './env.ts';
-import { parseJson } from './handoff.ts';
+import { parseJson, type CommandRun } from './handoff.ts';
 import { REQUEST_FILE, SESSION_FILE, SessionResult, type SessionRequest } from './session.ts';
 
 // Where the runner's directories appear inside a fixer container.
@@ -17,6 +17,9 @@ export const CONTAINER = {
 export const LIMITS = { cpus: '2', memory: '8g', pids: '4096' } as const;
 
 export const SESSION_TIMEOUT_MS = 50 * 60_000;
+export const COMMAND_TIMEOUT_MS = 20 * 60_000;
+const START_TIMEOUT_MS = 5 * 60_000;
+const TAIL_CHARS = 3_000;
 
 const SESSION_FILE_LIMIT = 4 * 1024 * 1024;
 
@@ -88,6 +91,12 @@ export const sessionArgs = (spec: ContainerSpec): string[] => [
     `${CONTAINER.harness}/src/sentry/inner.ts`,
 ];
 
+// A fresh container that only sleeps, so each project command runs in it with docker exec and its exit code comes
+// from Docker, not from anything the commands print.
+export const verifierArgs = (spec: ContainerSpec): string[] => ['run', '--rm', '--detach', ...containerArgs(spec), spec.image, 'sleep', 'infinity'];
+
+export const execArgs = (name: string, command: string): string[] => ['exec', name, 'bash', '-c', command];
+
 export type ProcessRun = { exitCode: number | null; tail: string; timedOut: boolean };
 
 const TAIL_BYTES = 64 * 1024;
@@ -156,4 +165,41 @@ export async function runSessionContainer(context: DockerContext, request: Sessi
     const text = await readSessionFile(join(mounts.session, SESSION_FILE));
     if (text === undefined) throw new Error(`the session container exited with ${run.exitCode} and wrote no result: ${run.tail.slice(-2000)}`);
     return parseJson(text, SessionResult, 'the session result');
+}
+
+const ANSI = /\u001b\[[0-9;?]*[A-Za-z]/g;
+
+export const outputTail = (output: string): string => {
+    const text = output.replace(ANSI, '').trimEnd();
+    return text.length > TAIL_CHARS ? `...${text.slice(-TAIL_CHARS)}` : text;
+};
+
+// Runs each project command once, in order, in a fresh container with the same mounts as the session but no
+// session directory and no Claude token.
+export async function runVerification(context: DockerContext, commands: readonly string[]): Promise<CommandRun[]> {
+    if (commands.length === 0) return [];
+    const spawner = context.spawner ?? spawnDocker;
+    const env = containerEnv(context.source, context.extraEnv, 'none');
+    const { session: _session, ...mounts } = context.mounts;
+    const spec = { image: context.image, name: `${context.name}-verify`, user: context.user, mounts, env: Object.keys(env) };
+    const clientEnv = dockerClientEnv(context.source, env);
+    const remove = removeContainer(context, spec.name);
+    const started = await spawner(verifierArgs(spec), clientEnv, { timeoutMs: START_TIMEOUT_MS, echo: false, onTimeout: remove });
+    if (started.exitCode !== 0) throw new Error(`the verification container did not start (${started.exitCode}): ${started.tail.slice(-2000)}`);
+    const runs: CommandRun[] = [];
+    try {
+        for (const command of commands) {
+            if (runs.some((run) => run.exitCode === null)) {
+                runs.push({ command, exitCode: null, tail: 'Not run, because an earlier command did not finish.' });
+                continue;
+            }
+            process.stdout.write(`\n$ ${command}\n`);
+            const run = await spawner(execArgs(spec.name, command), clientEnv, { timeoutMs: COMMAND_TIMEOUT_MS, echo: true, onTimeout: remove });
+            const tail = run.timedOut ? `Stopped after ${COMMAND_TIMEOUT_MS / 60_000} minutes.\n${outputTail(run.tail)}` : outputTail(run.tail);
+            runs.push({ command, exitCode: run.exitCode, tail });
+        }
+    } finally {
+        await remove();
+    }
+    return runs;
 }

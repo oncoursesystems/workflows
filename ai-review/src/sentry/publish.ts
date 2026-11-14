@@ -2,7 +2,7 @@ import { isNotFound, type Octokit, type RepoRef } from '../github/client.ts';
 import { ensureLabels } from '../github/labels.ts';
 import { projectOf, type SentryFixConfig } from './config.ts';
 import { gate, type FixOutput } from './fix.ts';
-import type { ChangedFile, FixResult, PlannedIssue } from './handoff.ts';
+import type { ChangedFile, CommandRun, FixResult, PlannedIssue } from './handoff.ts';
 import { branchName, hasNote, LABELS, noteDate, type NoteMark } from './markers.ts';
 import { noFixNote, prNote, renderPrBody } from './report.ts';
 import { listNotes, postNote, type SentryOptions } from './sentry.ts';
@@ -85,7 +85,7 @@ async function findOpenPr(octokit: Octokit, repo: RepoRef, branch: string) {
     return open[0];
 }
 
-export async function publishPr(options: PublishOptions, planned: PlannedIssue, output: FixOutput, changes: readonly ChangedFile[]) {
+export async function publishPr(options: PublishOptions, planned: PlannedIssue, output: FixOutput, verification: readonly CommandRun[], changes: readonly ChangedFile[]) {
     const { octokit, repo } = options;
     await ensureLabels(octokit, repo, [LABELS.autofix]);
     const branch = branchName(planned.context.issue.shortId);
@@ -93,7 +93,7 @@ export async function publishPr(options: PublishOptions, planned: PlannedIssue, 
     const open = await findOpenPr(octokit, repo, branch);
     const update = branchUpdate(await branchHead(octokit, repo, branch), planned.sha, tree, open !== undefined);
     await pointBranch(octokit, repo, branch, update, planned.sha, tree, message);
-    const body = renderPrBody(planned, output);
+    const body = renderPrBody(planned, output, verification);
     let pr: { number: number; url: string; created: boolean };
     if (open !== undefined) {
         await octokit.rest.pulls.update({ ...repo, pull_number: open.number, ...(update === 'kept' ? {} : { title: output.commitTitle }), body });
@@ -114,14 +114,14 @@ export async function publish(planned: PlannedIssue, result: FixResult, options:
     if (project === undefined) return { kind: 'not-published', reason: `${issue.project} is no longer in the config` };
 
     // The fix job ran code the fixer could change, so its verdict is checked again here against the config.
-    const again = gate({ output, changes, project });
+    const again = gate({ output, verification: result.verification, changes, project });
     const reasons = [...new Set([...(result.gate.open ? [] : result.gate.reasons), ...(again.open ? [] : again.reasons)])];
     if (reasons.length > 0) {
         const mark = { kind: 'no-fix', date: noteDate(options.now), run: options.run } as const;
-        await noteOnce(options.sentry, issue.id, mark, noFixNote(mark, output, reasons));
+        await noteOnce(options.sentry, issue.id, mark, noFixNote(mark, reasons, output, result.verification));
         return { kind: 'no-fix', reasons };
     }
-    const pr = await publishPr(options, planned, output, changes);
-    await noteOnce(options.sentry, issue.id, { kind: 'pr', url: pr.url }, prNote(pr.url, output));
+    const pr = await publishPr(options, planned, output, result.verification, changes);
+    await noteOnce(options.sentry, issue.id, { kind: 'pr', url: pr.url }, prNote(pr.url, output, result.verification));
     return { kind: 'pr', url: pr.url, created: pr.created, branch: pr.branch };
 }

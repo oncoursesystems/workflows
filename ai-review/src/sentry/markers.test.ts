@@ -40,14 +40,16 @@ describe('a marker planted in Sentry or agent text', () => {
 
     it('does not change the issue a pull request body is marked with', () => {
         const project = { slug: 'oncourse-web', description: 'd', roots: ['client/web'], commands: [], env: [] };
-        const body = renderPrBody({ sha: 'a'.repeat(40), period: '7d', project, context }, output);
+        const body = renderPrBody({ sha: 'a'.repeat(40), period: '7d', project, context }, output, [{ command: planted, exitCode: 0, tail: planted }]);
         expect(markedIssueId(body)).toBe('111');
         expect(body.match(/<!-- sentry-issue/g)).toHaveLength(1);
         expect(markedIssueId(`${body}\n`.replace(issueMarker('111'), ''))).toBeUndefined();
     });
 
     it('cannot open an HTML comment in a Sentry note', () => {
-        const note = noFixNote({ kind: 'no-fix', date: '2026-11-13', run: '1' }, output, [`\`${planted}\` is outside the project roots.`]);
+        const note = noFixNote({ kind: 'no-fix', date: '2026-11-13', run: '1' }, [`\`${planted}\` is outside the project roots.`], output, [
+            { command: 'npm test', exitCode: 1, tail: planted },
+        ]);
         expect(note.split('\n').slice(1).join('\n')).not.toContain('<!--');
     });
 

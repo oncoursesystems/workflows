@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { containerArgs, runSessionContainer, sessionArgs, type ContainerSpec, type DockerContext, type ProcessRun, type Spawner } from './docker.ts';
+import { containerArgs, outputTail, runSessionContainer, runVerification, sessionArgs, verifierArgs, type ContainerSpec, type DockerContext, type ProcessRun, type Spawner } from './docker.ts';
 import type { SessionRequest } from './session.ts';
 
 const TOKEN = 'sk-ant-oat01-subscription-secret';
@@ -145,5 +145,74 @@ describe('runSessionContainer', () => {
             status: 'exhausted',
             error: 'the session ran past 50 minutes',
         });
+    });
+});
+
+describe('runVerification', () => {
+    type Call = { args: readonly string[]; env: Record<string, string> };
+
+    const context = (spawner: Spawner): DockerContext => ({
+        image: 'sentry-fix-runner:abc',
+        name: 'sentry-fix-101-1-1',
+        user: '1001:1001',
+        mounts: { work: '/w', harness: '/h', node: '/n', session: '/s' },
+        source: RUNNER,
+        extraEnv: ['FEATURE_FLAGS'],
+        spawner,
+    });
+
+    const recorder = (exec: (command: string) => Partial<ProcessRun>) => {
+        const calls: Call[] = [];
+        const spawner: Spawner = async (args, env) => {
+            calls.push({ args, env });
+            const run = args[0] === 'exec' ? exec(args.at(-1)!) : {};
+            return { exitCode: 0, tail: '', timedOut: false, ...run };
+        };
+        return { calls, spawner };
+    };
+
+    it('starts one fresh container without the Claude token or the session directory, and records each real exit code', async () => {
+        const { calls, spawner } = recorder((command) => (command === 'npm test' ? { exitCode: 1, tail: '\u001b[31m1 failing\u001b[0m\n' } : { tail: 'ok\n' }));
+        const runs = await runVerification(context(spawner), ['npm ci', 'npm test']);
+        expect(runs).toEqual([
+            { command: 'npm ci', exitCode: 0, tail: 'ok' },
+            { command: 'npm test', exitCode: 1, tail: '1 failing' },
+        ]);
+        expect(calls.map((call) => call.args.slice(0, 3))).toEqual([
+            ['run', '--rm', '--detach'],
+            ['exec', 'sentry-fix-101-1-1-verify', 'bash'],
+            ['exec', 'sentry-fix-101-1-1-verify', 'bash'],
+            ['rm', '--force', 'sentry-fix-101-1-1-verify'],
+        ]);
+        const start = calls[0]!;
+        expect(start.args.slice(-3)).toEqual(['sentry-fix-runner:abc', 'sleep', 'infinity']);
+        expect(pairs(start.args, '--env').sort()).toEqual(['FEATURE_FLAGS', 'LANG']);
+        expect(pairs(start.args, '--mount').some((mount) => mount.includes('target=/session'))).toBe(false);
+        expect(pairs(start.args, '--mount')).toContain('type=bind,source=/w/.git,target=/work/.git,readonly');
+        for (const call of calls) expect(Object.values(call.env)).not.toContain(TOKEN);
+    });
+
+    it('runs nothing after a command that did not finish, and still removes the container', async () => {
+        const { calls, spawner } = recorder((command) => (command === 'npm ci' ? { exitCode: null, timedOut: true, tail: 'installing' } : {}));
+        const runs = await runVerification(context(spawner), ['npm ci', 'npm test']);
+        expect(runs).toEqual([
+            { command: 'npm ci', exitCode: null, tail: 'Stopped after 20 minutes.\ninstalling' },
+            { command: 'npm test', exitCode: null, tail: 'Not run, because an earlier command did not finish.' },
+        ]);
+        expect(calls.at(-1)?.args).toEqual(['rm', '--force', 'sentry-fix-101-1-1-verify']);
+    });
+
+    it('fails when the container does not start, and starts none for a project without commands', async () => {
+        const failing: Spawner = async () => ({ exitCode: 125, tail: 'Unable to find image', timedOut: false });
+        await expect(runVerification(context(failing), ['npm test'])).rejects.toThrow('the verification container did not start (125): Unable to find image');
+        const { calls, spawner } = recorder(() => ({}));
+        expect(await runVerification(context(spawner), [])).toEqual([]);
+        expect(calls).toEqual([]);
+    });
+
+    it('keeps the end of long output', () => {
+        expect(outputTail(`${'x'.repeat(5000)}end\n`)).toMatch(/^\.\.\.x+end$/);
+        expect(outputTail(`${'x'.repeat(5000)}end`).length).toBe(3003);
+        expect(verifierArgs(spec).slice(0, 3)).toEqual(['run', '--rm', '--detach']);
     });
 });

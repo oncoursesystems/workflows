@@ -12,7 +12,7 @@ import {
     leakedIn,
 } from './fix.ts';
 import { collectChanges, gitIn, snapshot, tamperedPaths, type Git } from './git.ts';
-import type { FixResult, PlannedIssue } from './handoff.ts';
+import type { CommandRun, FixResult, PlannedIssue } from './handoff.ts';
 import type { SessionRequest, SessionResult } from './session.ts';
 
 async function readRules(cwd: string): Promise<RepoRules> {
@@ -24,6 +24,8 @@ async function readRules(cwd: string): Promise<RepoRules> {
 export type Containers = {
     // Runs the agent session in a throwaway container with the checkout mounted.
     session(request: SessionRequest): Promise<SessionResult>;
+    // Runs each project command once in a fresh container, after the session.
+    verify(commands: readonly string[]): Promise<CommandRun[]>;
 };
 
 export type FixerOptions = {
@@ -63,12 +65,21 @@ export async function runFixer(options: FixerOptions): Promise<FixResult> {
     }
     if (session.status !== 'done') return { status: 'failed', error: session.error };
 
+    let verification: CommandRun[] = [];
+    if (session.output.outcome === 'fixed') {
+        try {
+            verification = await options.containers.verify(planned.project.commands);
+        } catch (error) {
+            return { status: 'failed', error: `the verification container failed: ${errorText(error)}` };
+        }
+    }
+
     const tampered = await tamperedPaths(cwd, before);
     if (tampered.length > 0) {
         return { status: 'failed', error: `the fixer's run changed ${tampered.map((path) => `\`${path}\``).join(', ')}, which git on the runner reads, so nothing was collected` };
     }
     const changes = await collectChanges(git, cwd, before, planned.project.roots);
     const texts = changes.flatMap((change) => (change.content === null ? [] : [{ path: change.path, text: Buffer.from(change.content, 'base64').toString('utf8') }]));
-    const verdict = gate({ output: session.output, changes, project: planned.project, leaks: leakedIn(texts, options.secrets()) });
-    return { status: 'done', output: session.output, gate: verdict, changes, stats: session.stats };
+    const verdict = gate({ output: session.output, verification, changes, project: planned.project, leaks: leakedIn(texts, options.secrets()) });
+    return { status: 'done', output: session.output, verification, gate: verdict, changes, stats: session.stats };
 }

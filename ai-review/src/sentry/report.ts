@@ -2,7 +2,7 @@ import { cell } from '../jev/report.ts';
 import type { Period, SentryFixConfig } from './config.ts';
 import { frameLine } from './context.ts';
 import type { FixOutput } from './fix.ts';
-import type { PlannedIssue } from './handoff.ts';
+import type { CommandRun, PlannedIssue } from './handoff.ts';
 import { defang, issueMarker, renderNoteMark, type NoteMark } from './markers.ts';
 import type { Plan, WalkRow } from './plan.ts';
 
@@ -52,13 +52,54 @@ export function fenced(text: string): string {
     return `${fence}\n${text}\n${fence}`;
 }
 
-export function renderPrBody(planned: PlannedIssue, output: FixOutput): string {
+const runResult = (run: CommandRun): string =>
+    run.exitCode === 0 ? 'passed' : run.exitCode === null ? 'did not finish' : `failed with exit code ${run.exitCode}`;
+
+const TAIL_LIMIT = 1_500;
+
+function verificationSection(verification: readonly CommandRun[], output: FixOutput): string[] {
+    const harness =
+        verification.length === 0
+            ? ['The project has no commands to run.']
+            : [
+                  'The workflow ran each project command once more, in a fresh container, after Claude finished. These results decide the gate.',
+                  '',
+                  '| Command | Result |',
+                  '| --- | --- |',
+                  ...verification.map((run) => `| \`${cell(run.command)}\` | ${runResult(run)} |`),
+              ];
+    const reported =
+        output.verification.length === 0
+            ? []
+            : [
+                  '',
+                  "<details><summary>Claude's own report of its runs, which does not decide the gate</summary>",
+                  '',
+                  '| Command | Claude reported |',
+                  '| --- | --- |',
+                  ...output.verification.map((run) => `| \`${cell(run.command)}\` | ${run.passed ? 'passed' : 'failed'} |`),
+                  '',
+                  '</details>',
+              ];
+    return [...harness, ...reported];
+}
+
+const verificationNote = (verification: readonly CommandRun[]): string[] =>
+    verification.length === 0
+        ? []
+        : [
+              'The workflow ran the project commands itself:',
+              '',
+              ...verification.flatMap((run) => [
+                  `- \`${run.command}\` ${runResult(run)}`,
+                  ...(run.exitCode === 0 || run.tail === '' ? [] : ['', fenced(clip(run.tail.slice(-TAIL_LIMIT), TAIL_LIMIT)), '']),
+              ]),
+              '',
+          ];
+
+export function renderPrBody(planned: PlannedIssue, output: FixOutput, verification: readonly CommandRun[]): string {
     const { context } = planned;
     const { issue } = context;
-    const verification =
-        output.verification.length === 0
-            ? ['The project has no commands to run.']
-            : ['| Command | Result |', '| --- | --- |', ...output.verification.map((run) => `| \`${cell(run.command)}\` | ${run.passed ? 'passed' : 'failed'} |`)];
     const content = [
         `## Sentry fix for ${issue.shortId}`,
         '',
@@ -94,7 +135,7 @@ export function renderPrBody(planned: PlannedIssue, output: FixOutput): string {
         '',
         '### Verification',
         '',
-        ...verification,
+        ...verificationSection(verification, output),
         '',
         `Opened by sentry-fix at ${output.confidence} confidence. Review it like any other pull request.`,
     ].join('\n');
@@ -103,18 +144,27 @@ export function renderPrBody(planned: PlannedIssue, output: FixOutput): string {
 
 const note = (mark: string, lines: readonly string[]): string => clip([mark, '', defang(lines.join('\n'))].join('\n'), NOTE_LIMIT);
 
-export const prNote = (url: string, output: FixOutput): string =>
-    note(renderNoteMark({ kind: 'pr', url }), [`Opened a fix: ${output.commitTitle}`, '', `Root cause: ${output.rootCause}`]);
+export const prNote = (url: string, output: FixOutput, verification: readonly CommandRun[]): string =>
+    note(renderNoteMark({ kind: 'pr', url }), [
+        `Opened a fix: ${output.commitTitle}`,
+        '',
+        `Root cause: ${output.rootCause}`,
+        ...(verification.length === 0 ? [] : ['', ...verificationNote(verification)]),
+    ]);
 
-export function noFixNote(mark: Extract<NoteMark, { kind: 'no-fix' }>, output: FixOutput, reasons: readonly string[]): string {
+export function noFixNote(
+    mark: Extract<NoteMark, { kind: 'no-fix' }>,
+    reasons: readonly string[],
+    output?: FixOutput,
+    verification: readonly CommandRun[] = [],
+): string {
     return note(renderNoteMark(mark), [
         'sentry-fix found no confident fix, so it opened no pull request.',
         '',
         ...reasons.map((reason) => `- ${reason}`),
         '',
-        `Root cause: ${output.rootCause}`,
-        '',
-        output.analysis,
+        ...verificationNote(verification),
+        ...(output === undefined ? [] : [`Root cause: ${output.rootCause}`, '', output.analysis]),
     ]);
 }
 

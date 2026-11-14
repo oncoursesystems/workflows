@@ -6,7 +6,7 @@ import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
 import { DEFAULT_JEV_MODEL } from '../jev/transport.ts';
 import { DEFAULT_CONFIG_PATH } from './config.ts';
-import { runSessionContainer, type DockerContext } from './docker.ts';
+import { runSessionContainer, runVerification, type DockerContext } from './docker.ts';
 import { CLAUDE_AUTH_VARIABLE } from './env.ts';
 import { runFixer } from './fixer.ts';
 import { defaultBranchHead, requireConfig } from './github.ts';
@@ -104,7 +104,7 @@ async function fixIn(cwd: string, planned: PlannedIssue): Promise<FixResult> {
         return await runFixer({
             planned,
             cwd,
-            containers: { session: (request) => runSessionContainer(docker, request) },
+            containers: { session: (request) => runSessionContainer(docker, request), verify: (commands) => runVerification(docker, commands) },
             secrets: () => [token],
         });
     } finally {
@@ -126,6 +126,7 @@ async function fixCommand(): Promise<void> {
     const verdict = result.gate.open ? 'a pull request' : `a no-fix note (${result.gate.reasons.join(' ')})`;
     core.info(`${shortId}: ${result.output.outcome} at ${result.output.confidence} confidence, for ${verdict}.`);
     core.info(`${result.stats.billing}, $${result.stats.costUsd.toFixed(2)}, ${result.stats.turns} turns. Denied: ${result.stats.denied.join(', ') || 'none'}.`);
+    for (const run of result.verification) core.info(`Verified \`${run.command}\`: exit code ${run.exitCode ?? 'none, it did not finish'}.`);
 }
 
 async function publishCommand(): Promise<void> {
