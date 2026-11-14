@@ -61,7 +61,7 @@ jobs:
           sentry-token: ${{ secrets.SENTRY_TOKEN }}
           sentry-org: ${{ vars.SENTRY_ORG }}
 
-# --- A step in the release workflow, after the release exists in Sentry -----------------------------
+# --- A step in the release workflow, after the release is tagged ------------------------------------
 # Web: the version is the one create-release tagged. Mobile: run it after the store build and pass the
 # whole release name with its +build suffix instead of the version. A Sentry outage must not block a
 # release, so each step continues on error. The step itself fails only when every fix in it failed.

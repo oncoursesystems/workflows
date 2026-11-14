@@ -8,7 +8,7 @@ inputs:
     description: Token that reads the config, compares the tags and swaps the labels.
     required: true
   sentry-token:
-    description: Sentry auth token with the event:read and event:write scopes.
+    description: Sentry auth token with the event:read, event:write and project:releases scopes.
     required: true
   sentry-org:
     description: Sentry organization slug.

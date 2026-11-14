@@ -19,7 +19,7 @@ Once a week, the workflow takes a repository's most frequent production Sentry i
     Anything else counts as no fix. A fixer that runs out of budget, turns or time also counts as no fix.
 5. **Publish.** The `publish` job holds the bot and Sentry tokens and runs no repository code. For a fix, it commits the changes through the GitHub API as the bot app, points the branch `sentry-fix/<short id>` at the commit, and opens a ready pull request with the `sentry-autofix` label. Because the bot opens it, the repository's `pull_request` workflows (risk-tier, ai-review, CI) run on it. GitHub requests reviews from `CODEOWNERS`. Nobody is assigned. When the pull request is already open and someone else pushed to its branch, publish leaves the branch alone and refreshes only the body. The body says the build and the tests are verified by the pull request's CI checks. For no fix, it posts the gate's reasons and Claude's analysis as a Sentry note, and opens nothing.
 6. **Merge.** The `sentry-fix-merged` action, on a closed pull request, adds `sentry-fix-merged` to a merged auto-fix pull request and posts a merged note.
-7. **Release.** The `sentry-fix-release` action finds the merged `sentry-autofix` pull requests without `sentry-fix-released` whose merge commit is between the previous tag and this one. A missing `sentry-fix-merged` label does not matter. It resolves each issue whose project reports the app with `inRelease` set to the exact release name, and swaps the label to `sentry-fix-released`. It never resolves an issue at pull request time or with "next release". A pull request that fails, for example because its Sentry issue was deleted, is a warning, and the rest still resolve. The step fails only when every pull request in it failed.
+7. **Release.** The `sentry-fix-release` action finds the merged `sentry-autofix` pull requests without `sentry-fix-released` whose merge commit is between the previous tag and this one. A missing `sentry-fix-merged` label does not matter. When it finds one, it creates the release in the app's projects, because Sentry resolves an issue only in a release it knows and an app reports its release only after it deploys. Then it resolves each issue whose project reports the app with `inRelease` set to the exact release name, and swaps the label to `sentry-fix-released`. It never resolves an issue at pull request time or with "next release". A pull request that fails, for example because its Sentry issue was deleted, is a warning, and the rest still resolve. The step fails only when every pull request in it failed.
 
 Every step converges on a rerun. A rerun reuses the branch and the open pull request, and posts no note twice.
 
@@ -109,7 +109,7 @@ The calling repository keeps its config at `.github/sentry-fix.yml` on the defau
 
 ## Secrets
 
-- `sentry-token`: a Sentry auth token with `project:read`, `event:read` and `event:write`.
+- `sentry-token`: a Sentry auth token with `project:read`, `event:read` and `event:write`. The release action also needs `project:releases`.
 - `typesafe-api-key`: TypeSafe API key for Jev.
 - `claude-code-oauth-token`: Claude Code OAuth token the fixer runs on.
 - `bot-app-private-key`: private key of the bot app.
@@ -118,7 +118,7 @@ The calling repository keeps its config at `.github/sentry-fix.yml` on the defau
 
 `sentry-fix-merged` takes `github-token`, `sentry-token` and `sentry-org`. Run it on `pull_request: closed`.
 
-`sentry-fix-release` takes `github-token`, `sentry-token`, `sentry-org`, `app`, `tag`, `previous-tag`, and either `version` or `release`. With `version`, the release name is the app's template filled in. With `release`, the name is used as given. Mobile passes `release` after the store build, because only then does the version have its `+build` suffix. Run it after the release exists in Sentry, with `continue-on-error: true`, so a Sentry outage never blocks a release. The step output `release` is the name it used.
+`sentry-fix-release` takes `github-token`, `sentry-token`, `sentry-org`, `app`, `tag`, `previous-tag`, and either `version` or `release`. With `version`, the release name is the app's template filled in. With `release`, the name is used as given. Mobile passes `release` after the store build, because only then does the version have its `+build` suffix. Run it after the release is tagged, with `continue-on-error: true`, so a Sentry outage never blocks a release. The step output `release` is the name it used.
 
 When two apps report the same Sentry project, the issue resolves in the release of whichever app ships the fix first, and the label moves to `sentry-fix-released` then.
 

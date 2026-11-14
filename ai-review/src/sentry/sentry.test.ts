@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fetchIssue, listNotes, postNote, projectId, rankIssues, resolveInRelease } from './sentry.ts';
+import { ensureRelease, fetchIssue, listNotes, postNote, projectId, rankIssues, resolveInRelease } from './sentry.ts';
 import { fakeSentry } from './testing.ts';
 
 const issueBody = (id: string, count: string, fields: Record<string, unknown> = {}) => ({
@@ -78,12 +78,14 @@ describe('the issue endpoints', () => {
         await expect(listNotes(options, '7')).resolves.toEqual(['[sentry-fix] no-fix 2026-11-06']);
     });
 
-    it('posts a note and resolves in an exact release', async () => {
+    it('posts a note, creates the release and resolves in it', async () => {
         const { options, calls } = fakeSentry(() => ({}));
         await postNote(options, '7', 'hello');
+        await ensureRelease(options, 'OnCourse.Web@2026.11.13.1200', ['oncourse-dotnet', 'oncourse-web']);
         await resolveInRelease(options, '7', 'OnCourse.Web@2026.11.13.1200');
         expect(calls.map((call) => [call.method, call.url.pathname, call.body])).toEqual([
             ['POST', '/api/0/organizations/o/issues/7/comments/', { text: 'hello' }],
+            ['POST', '/api/0/organizations/o/releases/', { version: 'OnCourse.Web@2026.11.13.1200', projects: ['oncourse-dotnet', 'oncourse-web'] }],
             ['PUT', '/api/0/organizations/o/issues/7/', { status: 'resolved', statusDetails: { inRelease: 'OnCourse.Web@2026.11.13.1200' } }],
         ]);
     });

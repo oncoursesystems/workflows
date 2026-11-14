@@ -98,9 +98,10 @@ describe('resolveRelease', () => {
             [2, 'skipped', 'oncourse-mobile does not report web'],
             [4, 'resolved', 'resolved in OnCourse.Web@2026.11.13.1200'],
         ]);
-        expect(calls.filter((call) => call.method === 'PUT').map((call) => [call.url.pathname, call.body])).toEqual([
-            ['/api/0/organizations/o/issues/11/', { status: 'resolved', statusDetails: { inRelease: 'OnCourse.Web@2026.11.13.1200' } }],
-            ['/api/0/organizations/o/issues/14/', { status: 'resolved', statusDetails: { inRelease: 'OnCourse.Web@2026.11.13.1200' } }],
+        expect(calls.filter((call) => call.method !== 'GET').map((call) => [call.method, call.url.pathname, call.body])).toEqual([
+            ['POST', '/api/0/organizations/o/releases/', { version: 'OnCourse.Web@2026.11.13.1200', projects: config.apps[0]!.projects }],
+            ['PUT', '/api/0/organizations/o/issues/11/', { status: 'resolved', statusDetails: { inRelease: 'OnCourse.Web@2026.11.13.1200' } }],
+            ['PUT', '/api/0/organizations/o/issues/14/', { status: 'resolved', statusDetails: { inRelease: 'OnCourse.Web@2026.11.13.1200' } }],
         ]);
         const labels = (number: number) => github.prs.find((pr) => pr.number === number)?.labels;
         expect(labels(1)).toEqual(['sentry-autofix', 'sentry-fix-released']);
