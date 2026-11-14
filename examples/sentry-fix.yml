@@ -28,7 +28,7 @@ jobs:
       issues: read
     with:
       dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
-      runs-on: linux
+      runs-on: linux # the fix job needs Docker with buildx
       node-version: "20"
       global-json-file: global.json
       sentry-org: ${{ vars.SENTRY_ORG }}
