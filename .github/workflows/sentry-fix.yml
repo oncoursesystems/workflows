@@ -1,0 +1,145 @@
+name: sentry-fix
+
+on:
+  workflow_call:
+    inputs:
+      config-path:
+        description: Path of the sentry-fix config, read from the default branch
+        type: string
+        default: .github/sentry-fix.yml
+      dry-run:
+        description: Print the walk to the job summary, and run no fixer, open no pull request and post no note
+        type: boolean
+        default: false
+      runs-on:
+        description: Runner label for every job
+        type: string
+        default: linux
+      sentry-org:
+        description: Sentry organization slug
+        type: string
+        required: true
+      bot-client-id:
+        description: Client ID of the GitHub App that opens the pull requests
+        type: string
+        required: true
+    secrets:
+      sentry-token:
+        required: true
+      typesafe-api-key:
+        required: true
+      claude-code-oauth-token:
+        required: true
+      bot-app-private-key:
+        required: true
+
+permissions: {}
+
+jobs:
+  plan:
+    runs-on: ${{ inputs.runs-on }}
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      issues: ${{ steps.plan.outputs.issues }}
+      count: ${{ steps.plan.outputs.count }}
+      sha: ${{ steps.plan.outputs.sha }}
+      plan-sha256: ${{ steps.plan.outputs.plan-sha256 }}
+    steps:
+      - name: Plan the issues to attempt
+        id: plan
+        uses: oncoursesystems/workflows/.github/actions/sentry-fix-plan@main
+        with:
+          github-token: ${{ github.token }}
+          sentry-token: ${{ secrets.sentry-token }}
+          sentry-org: ${{ inputs.sentry-org }}
+          typesafe-api-key: ${{ secrets.typesafe-api-key }}
+          config-path: ${{ inputs.config-path }}
+          dry-run: ${{ inputs.dry-run }}
+          plan-dir: ${{ runner.temp }}/sentry-fix-plan
+
+      - name: Keep the plan for the fix and publish jobs
+        if: steps.plan.outputs.count != '' && steps.plan.outputs.count != '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sentry-fix-plan
+          path: ${{ runner.temp }}/sentry-fix-plan/plan.json
+          if-no-files-found: error
+          retention-days: 14
+
+  fix:
+    needs: plan
+    if: needs.plan.outputs.count != '' && needs.plan.outputs.count != '0'
+    name: fix ${{ matrix.issue.shortId }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        issue: ${{ fromJSON(needs.plan.outputs.issues) }}
+    steps:
+      - name: Check out the planned commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+
+      - name: Download the plan
+        uses: actions/download-artifact@v8
+        with:
+          name: sentry-fix-plan
+          path: ${{ runner.temp }}/sentry-fix-plan
+
+      - name: Fix the issue
+        uses: oncoursesystems/workflows/.github/actions/sentry-fix-run@main
+        with:
+          plan-file: ${{ runner.temp }}/sentry-fix-plan/plan.json
+          plan-sha256: ${{ needs.plan.outputs.plan-sha256 }}
+          issue-id: ${{ matrix.issue.id }}
+          out-dir: ${{ runner.temp }}/sentry-fix/${{ matrix.issue.id }}
+          claude-code-oauth-token: ${{ secrets.claude-code-oauth-token }}
+
+      - name: Keep the result for the publish job
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sentry-fix-result-${{ matrix.issue.id }}
+          path: ${{ runner.temp }}/sentry-fix/${{ matrix.issue.id }}
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    needs: [plan, fix]
+    if: ${{ !cancelled() && needs.plan.outputs.count != '' && needs.plan.outputs.count != '0' }}
+    runs-on: ${{ inputs.runs-on }}
+    permissions:
+      contents: read
+    steps:
+      - name: Download the plan
+        uses: actions/download-artifact@v8
+        with:
+          name: sentry-fix-plan
+          path: ${{ runner.temp }}/sentry-fix-plan
+
+      - name: Download the fixer results
+        uses: actions/download-artifact@v8
+        with:
+          pattern: sentry-fix-result-*
+          path: ${{ runner.temp }}/sentry-fix
+
+      - name: Publish the results
+        uses: oncoursesystems/workflows/.github/actions/sentry-fix-publish@main
+        with:
+          plan-file: ${{ runner.temp }}/sentry-fix-plan/plan.json
+          plan-sha256: ${{ needs.plan.outputs.plan-sha256 }}
+          results-dir: ${{ runner.temp }}/sentry-fix
+          bot-client-id: ${{ inputs.bot-client-id }}
+          bot-app-private-key: ${{ secrets.bot-app-private-key }}
+          sentry-token: ${{ secrets.sentry-token }}
+          sentry-org: ${{ inputs.sentry-org }}
+          config-path: ${{ inputs.config-path }}

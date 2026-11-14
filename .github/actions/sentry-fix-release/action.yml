@@ -1,0 +1,67 @@
+name: Sentry fix release
+description: >
+  Resolve the Sentry issues whose sentry-fix pull request merged between two tags, in the exact release name of
+  one app, and swap the pull request label from sentry-fix-merged to sentry-fix-released.
+
+inputs:
+  github-token:
+    description: Token that reads the config, compares the tags and swaps the labels.
+    required: true
+  sentry-token:
+    description: Sentry auth token with the event:read and event:write scopes.
+    required: true
+  sentry-org:
+    description: Sentry organization slug.
+    required: true
+  app:
+    description: App name from the config's apps list, such as web.
+    required: true
+  version:
+    description: Version that fills the app's release template. Give this or release.
+    required: false
+  release:
+    description: Full Sentry release name, used as given. Mobile passes it after the store build adds the +build suffix.
+    required: false
+  tag:
+    description: Git tag of this release.
+    required: true
+  previous-tag:
+    description: Git tag of the previous release of the same app.
+    required: true
+  config-path:
+    description: Path of the sentry-fix config, read from the default branch.
+    required: false
+    default: .github/sentry-fix.yml
+
+outputs:
+  release:
+    description: The Sentry release name the issues were resolved in.
+    value: ${{ steps.release.outputs.release }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    - name: Install sentry-fix
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../../ai-review
+      run: npm ci --omit=dev --no-audit --no-fund
+
+    - name: Resolve the shipped issues
+      id: release
+      shell: bash
+      env:
+        INPUT_COMMAND: release
+        INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
+        INPUT_SENTRY-TOKEN: ${{ inputs.sentry-token }}
+        INPUT_SENTRY-ORG: ${{ inputs.sentry-org }}
+        INPUT_APP: ${{ inputs.app }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_RELEASE: ${{ inputs.release }}
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_PREVIOUS-TAG: ${{ inputs.previous-tag }}
+        INPUT_CONFIG-PATH: ${{ inputs.config-path }}
+      run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/sentry/action.ts"

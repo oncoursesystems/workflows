@@ -1,0 +1,44 @@
+name: Sentry fix run
+description: >
+  Run the Claude fixer on one planned Sentry issue, check its change against the gate, and write the result for
+  the publish job. The fixer only reads and edits files, and the action holds no GitHub or Sentry token.
+
+inputs:
+  plan-file:
+    description: The plan file from the sentry-fix-plan artifact.
+    required: true
+  plan-sha256:
+    description: SHA-256 of the plan file, from the sentry-fix-plan output.
+    required: true
+  issue-id:
+    description: Sentry issue id of the planned issue to fix.
+    required: true
+  out-dir:
+    description: Directory the result is written to.
+    required: true
+  claude-code-oauth-token:
+    description: Claude Code OAuth token the fixer runs on.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    - name: Install sentry-fix
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../../ai-review
+      run: npm ci --omit=dev --no-audit --no-fund
+
+    - name: Fix the issue
+      shell: bash
+      env:
+        INPUT_COMMAND: fix
+        INPUT_PLAN-FILE: ${{ inputs.plan-file }}
+        INPUT_PLAN-SHA256: ${{ inputs.plan-sha256 }}
+        INPUT_ISSUE-ID: ${{ inputs.issue-id }}
+        INPUT_OUT-DIR: ${{ inputs.out-dir }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+      run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/sentry/action.ts"

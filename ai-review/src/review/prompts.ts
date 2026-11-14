@@ -21,7 +21,7 @@ const SEVERITY_RULE =
     'or break a screen or endpoint. REVIEW.md, when present, defines Important for this repository and overrides ' +
     'this default. Every other real bug is "minor".';
 
-const rulesSection = ({ claudeMd, reviewMd }: RepoRules): string =>
+export const rulesSection = ({ claudeMd, reviewMd }: RepoRules): string =>
     [
         claudeMd ? `<claude_md>\n${claudeMd}\n</claude_md>` : '',
         reviewMd ? `<review_md>\nRules from the code owners. They override your defaults.\n${reviewMd}\n</review_md>` : '',

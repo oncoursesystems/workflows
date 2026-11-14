@@ -15,7 +15,8 @@
     "build:ai-labeler": "esbuild src/labels/action.ts --bundle --platform=node --target=node22 --format=cjs --outfile=../.github/actions/ai-labeler/dist/index.js",
     "risk": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/risk/cli.ts",
     "labels": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/labels/cli.ts",
-    "review": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/review/cli.ts"
+    "review": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/review/cli.ts",
+    "sentry": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/sentry/cli.ts"
   },
   "dependencies": {
     "@actions/core": "3.0.1",
