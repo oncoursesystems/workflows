@@ -1,33 +1,13 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AgentRequest, RunAgent } from '../review/agent.ts';
 import type { FixOutput } from './fix.ts';
-import { parseRawDiff, runFixer } from './fixer.ts';
+import { runFixer } from './fixer.ts';
 import type { PlannedIssue } from './handoff.ts';
 import { issueContextOf } from './testing.ts';
-
-describe('parseRawDiff', () => {
-    it('reads added, modified, type-changed and deleted paths with their new mode', () => {
-        const raw =
-            ':000000 100644 0000000 1111111 A\0client/web/new test.js\0' +
-            ':100644 100755 1111111 2222222 M\0client/web/a.js\0' +
-            ':100644 120000 1111111 3333333 T\0client/web/link\0' +
-            ':100644 000000 1111111 0000000 D\0client/web/old.js\0';
-        expect(parseRawDiff(raw)).toEqual([
-            { path: 'client/web/new test.js', status: 'added', mode: '100644' },
-            { path: 'client/web/a.js', status: 'modified', mode: '100755' },
-            { path: 'client/web/link', status: 'modified', mode: '120000' },
-            { path: 'client/web/old.js', status: 'deleted', mode: '000000' },
-        ]);
-    });
-
-    it('reads an empty diff as no changes', () => {
-        expect(parseRawDiff('')).toEqual([]);
-    });
-});
 
 const output: FixOutput = {
     outcome: 'fixed',
@@ -95,8 +75,8 @@ describe('runFixer', () => {
         if (result.status !== 'done') return;
         expect(result.changes.map(({ path, status, content }) => [path, status, content && Buffer.from(content, 'base64').toString()])).toEqual([
             ['client/web/grid.js', 'modified', 'if (store) load();\n'],
-            ['client/web/grid.test.js', 'added', 'test();\n'],
             ['client/web/old.js', 'deleted', null],
+            ['client/web/grid.test.js', 'added', 'test();\n'],
         ]);
     });
 
@@ -130,9 +110,24 @@ describe('runFixer', () => {
     });
 
     it('refuses a checkout at another commit than the plan', async () => {
-        const { runAgent } = agent(() => {});
-        await expect(runFixer({ planned: { ...planned, sha: 'f'.repeat(40) }, cwd: dir, runAgent, env: {}, secrets: () => [] })).rejects.toThrow(
-            'but the plan was made at',
-        );
+        const { runAgent, requests } = agent(() => {});
+        const result = await runFixer({ planned: { ...planned, sha: 'f'.repeat(40) }, cwd: dir, runAgent, env: {}, secrets: () => [] });
+        expect(result).toMatchObject({ status: 'failed', error: expect.stringContaining('but the plan was made at') });
+        expect(requests).toEqual([]);
+    });
+
+    it('fails, and collects nothing, when the run changed .git/config or a .gitattributes', async () => {
+        const pwned = `${dir}-pwned`;
+        const { runAgent } = agent(() => {
+            writeFileSync(join(dir, '.git/config'), `[filter "x"]\n\tclean = touch ${pwned}\n`, { flag: 'a' });
+            writeFileSync(join(dir, 'client/web/.gitattributes'), '* filter=x\n');
+            writeFileSync(join(dir, 'client/web/grid.js'), 'if (store) load();\n');
+        });
+        const result = await runFixer({ planned, cwd: dir, runAgent, env: {}, secrets: () => [] });
+        expect(result).toEqual({
+            status: 'failed',
+            error: "the fixer's run changed `.git/config`, `client/web/.gitattributes`, which git on the runner reads, so nothing was collected",
+        });
+        expect(existsSync(pwned)).toBe(false);
     });
 });
