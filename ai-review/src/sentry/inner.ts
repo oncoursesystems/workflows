@@ -9,7 +9,9 @@ import { REQUEST_FILE, SESSION_FILE, SessionRequest, sessionFailure, type Sessio
 // The entry point inside the fixer's container. The container's env is already the allowlist, so it is the session's.
 
 const request = parseJson(await readFile(join(CONTAINER.session, REQUEST_FILE), 'utf8'), SessionRequest, 'the session request');
-const env: Record<string, string> = { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' };
+// Claude Code's subprocess env scrub needs bubblewrap, which cannot create namespaces in this unprivileged container,
+// and with it on Claude Code refuses to start. The container is the isolation instead.
+const env: Record<string, string> = { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0' };
 for (const [name, value] of Object.entries(process.env)) if (value !== undefined) env[name] ??= value;
 
 let result: SessionResult;
