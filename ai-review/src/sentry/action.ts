@@ -14,7 +14,7 @@ import { fitPlan, FixResult, parseJson, PlannedIssue, readJson } from './handoff
 import { onMerged } from './merged.ts';
 import { plan } from './plan.ts';
 import { publish } from './publish.ts';
-import { resolveRelease } from './release.ts';
+import { allFailed, resolveRelease, type ResolveOutcome } from './release.ts';
 import { renderWalk } from './report.ts';
 import type { SentryOptions } from './sentry.ts';
 
@@ -179,12 +179,14 @@ async function releaseCommand(): Promise<void> {
             previousTag: core.getInput('previous-tag', { required: true }),
         },
     });
-    for (const outcome of outcomes) if (outcome.warning === true) core.warning(`#${outcome.number} ${outcome.shortId}: ${outcome.reason}`);
-    const lines = outcomes.map((outcome) => `- #${outcome.number} ${outcome.shortId}: ${outcome.reason}`);
+    const label = (outcome: ResolveOutcome) => `#${outcome.number} ${outcome.shortId ?? `issue ${outcome.issueId}`}: ${outcome.reason}`;
+    for (const outcome of outcomes) if (outcome.status === 'failed' || outcome.status === 'mismatch') core.warning(label(outcome));
+    const lines = outcomes.map((outcome) => `- ${label(outcome)}`);
     const summary = [`## Sentry issues resolved in ${release}`, '', ...(lines.length === 0 ? ['No sentry-fix pull request shipped in this release.'] : lines), ''].join('\n');
     core.info(summary);
     await core.summary.addRaw(summary).write();
     core.setOutput('release', release);
+    if (allFailed(outcomes)) core.setFailed(`Every sentry-fix pull request in ${release} failed to resolve.`);
 }
 
 const COMMANDS: Record<string, () => Promise<void>> = {

@@ -29,7 +29,7 @@ export async function defaultBranchHead(octokit: Octokit, repo: RepoRef): Promis
 
 type IssueItem = { number: number; state: string; body?: string | null; labels: Array<string | { name?: string }>; pull_request?: { merged_at?: string | null } };
 
-const labelNames = (labels: IssueItem['labels']): string[] =>
+export const labelNames = (labels: IssueItem['labels']): string[] =>
     labels.flatMap((label) => (typeof label === 'string' ? [label] : label.name ? [label.name] : []));
 
 export function toAutoFixPr(item: IssueItem): AutoFixPr | undefined {

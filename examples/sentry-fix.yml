@@ -70,9 +70,11 @@ jobs:
 
 # --- A step in the release workflow, after the release exists in Sentry -----------------------------
 # Web: the version is the one create-release tagged. Mobile: run it after the store build and pass the
-# whole release name with its +build suffix instead of the version.
+# whole release name with its +build suffix instead of the version. A Sentry outage must not block a
+# release, so each step continues on error. The step itself fails only when every fix in it failed.
 #
 #      - uses: oncoursesystems/workflows/.github/actions/sentry-fix-release@main
+#        continue-on-error: true
 #        with:
 #          github-token: ${{ github.token }}
 #          sentry-token: ${{ secrets.SENTRY_TOKEN }}
@@ -83,6 +85,7 @@ jobs:
 #          previous-tag: ${{ steps.previous.outputs.tag }}
 #
 #      - uses: oncoursesystems/workflows/.github/actions/sentry-fix-release@main
+#        continue-on-error: true
 #        with:
 #          github-token: ${{ github.token }}
 #          sentry-token: ${{ secrets.SENTRY_TOKEN }}
