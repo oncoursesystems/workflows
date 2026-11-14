@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { attributePaths, collectChanges, gitEnv, gitIn, parseStatus, snapshot, tamperedPaths } from './git.ts';
+import { attributePaths, collectChanges, gitEnv, gitIn, parseGitlinks, parseStatus, snapshot, tamperedPaths } from './git.ts';
 
 describe('gitEnv', () => {
     it('is PATH and HOME with no system or global config, and nothing else from the runner', () => {
@@ -56,6 +56,17 @@ describe('attributePaths', () => {
     });
 });
 
+describe('parseGitlinks', () => {
+    it('names the submodule paths in the index, spaces included', () => {
+        const raw =
+            '100644 1111111111111111111111111111111111111111 0\tREADME.md\0' +
+            '160000 2222222222222222222222222222222222222222 0\tsrc/Web.UI/Content/oncourse/ext\0' +
+            '160000 3333333333333333333333333333333333333333 0\tclient/my ext\0' +
+            '120000 4444444444444444444444444444444444444444 0\tlink\0';
+        expect(parseGitlinks(raw)).toEqual(['src/Web.UI/Content/oncourse/ext', 'client/my ext']);
+    });
+});
+
 describe('the harness git calls', () => {
     let dir: string;
     const run = (...args: string[]) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
@@ -101,6 +112,56 @@ describe('the harness git calls', () => {
         writeFileSync(join(dir, 'client/web/.gitattributes'), '* filter=x\n');
         writeFileSync(join(dir, 'client/.gitattributes'), '* filter=x\n');
         expect(await tamperedPaths(dir, before)).toEqual(['.git/config', 'client/.gitattributes', 'client/web/.gitattributes']);
+    });
+
+    describe('with a submodule gitlink, which a checkout leaves an empty directory', () => {
+        const outsideGit = (cwd: string, ...args: string[]) =>
+            execFileSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
+
+        beforeEach(() => {
+            run('update-index', '--add', '--cacheinfo', '160000,1111111111111111111111111111111111111111,client/web/ext');
+            run('commit', '--quiet', '-m', 'with a submodule gitlink');
+            mkdirSync(join(dir, 'client/web/ext'));
+        });
+
+        // What code in the fixer's container can do, because the work tree around the gitlink is writable: make it a
+        // git repository with a clean filter in its own config, and a file whose stat no longer matches its index.
+        const plantSubmodule = (marker: string) => {
+            const sub = join(dir, 'client/web/ext');
+            outsideGit(sub, 'init', '--quiet');
+            writeFileSync(join(sub, 'x'), 'x\n');
+            outsideGit(sub, 'add', 'x');
+            outsideGit(sub, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '--quiet', '-m', 'x');
+            outsideGit(sub, 'config', 'filter.pwn.clean', `touch ${marker}; cat`);
+            writeFileSync(join(sub, '.gitattributes'), '* filter=pwn\n');
+            utimesSync(join(sub, 'x'), new Date(2001, 1, 1), new Date(2001, 1, 1));
+        };
+
+        it('fingerprints the gitlink directory and its .git', async () => {
+            const before = await snapshot(gitIn(dir), dir);
+            expect([...before.fingerprints.keys()]).toEqual(['.git/config', '.gitattributes', 'client/.gitattributes', 'client/web/.gitattributes', 'client/web/ext', 'client/web/ext/.git']);
+            expect(await tamperedPaths(dir, before)).toEqual([]);
+        });
+
+        it('flags a planted submodule git dir, and git on the runner never runs its filter', async () => {
+            const marker = `${dir}-submodule-filter-ran`;
+            const git = gitIn(dir);
+            const before = await snapshot(git, dir);
+            plantSubmodule(marker);
+            expect(await tamperedPaths(dir, before)).toEqual(['client/web/ext', 'client/web/ext/.git']);
+            // Even a caller that skipped the tamper check reads nothing from inside the submodule.
+            expect(await collectChanges(git, dir, before, ['client/web'])).toEqual([]);
+            expect(existsSync(marker)).toBe(false);
+        });
+
+        it('flags a gitlink directory filled with anything, or replaced by a file or a link', async () => {
+            const before = await snapshot(gitIn(dir), dir);
+            writeFileSync(join(dir, 'client/web/ext/index.js'), 'evil();\n');
+            expect(await tamperedPaths(dir, before)).toEqual(['client/web/ext']);
+            rmSync(join(dir, 'client/web/ext'), { recursive: true });
+            symlinkSync('/etc', join(dir, 'client/web/ext'));
+            expect(await tamperedPaths(dir, before)).toEqual(['client/web/ext']);
+        });
     });
 
     it('sees a .gitattributes replaced by a symlink', async () => {

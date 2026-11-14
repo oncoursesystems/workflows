@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstat, readFile, readlink, realpath } from 'node:fs/promises';
+import { lstat, readdir, readFile, readlink, realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Change } from './fix.ts';
 import { insideRoots } from './fix.ts';
@@ -19,7 +19,20 @@ export function gitEnv(source: Readonly<Record<string, string | undefined>>): Re
     };
 }
 
-export const GIT_SAFETY = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false'];
+// A git dir the fixer planted at a gitlink path would make git run its config, so git on the runner never looks
+// inside a submodule.
+export const GIT_SAFETY = [
+    '-c',
+    'core.hooksPath=/dev/null',
+    '-c',
+    'core.fsmonitor=false',
+    '-c',
+    'submodule.recurse=false',
+    '-c',
+    'diff.ignoreSubmodules=all',
+    '-c',
+    'status.submoduleSummary=false',
+];
 
 export const gitIn =
     (cwd: string, source: Readonly<Record<string, string | undefined>> = process.env): Git =>
@@ -48,7 +61,7 @@ export function parseStatus(raw: string): StatusEntry[] {
     return entries;
 }
 
-const statusOf = (git: Git): StatusEntry[] => parseStatus(git(['status', '--porcelain=v2', '-z', '--untracked-files=all', '--no-renames', '--ignore-submodules=none']));
+const statusOf = (git: Git): StatusEntry[] => parseStatus(git(['status', '--porcelain=v2', '-z', '--untracked-files=all', '--no-renames', '--ignore-submodules=all']));
 
 // Git reads a .gitattributes in every directory above a tracked file. The index is read-only to the fixer, so this set
 // of directories is fixed before it runs.
@@ -69,8 +82,19 @@ async function fingerprint(path: string): Promise<string> {
         throw error;
     }
     if (stats.isSymbolicLink()) return `link ${await readlink(path)}`;
+    if (stats.isDirectory()) return `directory ${JSON.stringify((await readdir(path)).sort())}`;
     if (!stats.isFile()) return 'other';
     return createHash('sha256').update(await readFile(path)).digest('hex');
+}
+
+const GITLINK_MODE = '160000';
+
+// Submodule paths in the index, from `git ls-files -s -z`. A checkout leaves each one an empty directory.
+export function parseGitlinks(raw: string): string[] {
+    return raw.split('\0').flatMap((record) => {
+        const tab = record.indexOf('\t');
+        return tab !== -1 && record.startsWith(`${GITLINK_MODE} `) ? [record.slice(tab + 1)] : [];
+    });
 }
 
 export type GitSnapshot = { fingerprints: Map<string, string>; untracked: Set<string> };
@@ -78,10 +102,14 @@ export type GitSnapshot = { fingerprints: Map<string, string>; untracked: Set<st
 const fingerprints = async (cwd: string, paths: readonly string[]): Promise<Map<string, string>> =>
     new Map(await Promise.all(paths.map(async (path) => [path, await fingerprint(join(cwd, path))] as const)));
 
+// The gitlink directories are in the fingerprints, so one the fixer filled, with a git dir or anything else, fails
+// the tamper check before git on the runner reads the tree.
 export async function snapshot(git: Git, cwd: string): Promise<GitSnapshot> {
     const tracked = git(['ls-files', '-z']).split('\0').filter((path) => path !== '');
+    const gitlinks = parseGitlinks(git(['ls-files', '-s', '-z']));
     const untracked = statusOf(git).flatMap((entry) => (entry.kind === 'untracked' ? [entry.path] : []));
-    return { fingerprints: await fingerprints(cwd, ['.git/config', ...attributePaths(tracked)]), untracked: new Set(untracked) };
+    const paths = ['.git/config', ...attributePaths(tracked), ...gitlinks.flatMap((path) => [path, `${path}/.git`])];
+    return { fingerprints: await fingerprints(cwd, paths), untracked: new Set(untracked) };
 }
 
 // Run before any git call that could read a changed attribute or config, so a filter the fixer planted never runs.
