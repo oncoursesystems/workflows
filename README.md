@@ -19,7 +19,6 @@ The web workflow is designed to build and publish Docker images to a registry an
 - [ai-review](.github/actions/ai-review/action.yml) ([docs](docs/ai-review.md)) - Reviews a pull request with Claude bug finders sized by its risk tier and posts the findings that three reviewers confirm
 - [create-release](.github/workflows/create-release.yml) ([docs](docs/create-release.md)) - Creates a GitHub release and publishes a Docker image with the current timestamp as the tag
 - [docker-build](.github/workflows/docker-build.yml) ([docs](docs/docker-build.md)) - Builds a Docker image and pushes it to a registry
-- [e2e-testing](.github/workflows/e2e-testing.yml) ([docs](docs/e2e-testing.md)) - Agentic E2E UI testing using Claude AI and agent-browser
 - [pr-preview](.github/workflows/pr-preview.yml) ([docs](docs/pr-preview.md)) - Deploys a PR preview build to a kubernetes cluster
 - [risk-tier](.github/actions/risk-tier/action.yml) ([docs](docs/risk-tier.md)) - Classifies a pull request as low, medium, or high risk and publishes the tier as a label and a check
 - [sentry-fix](.github/workflows/sentry-fix.yml) ([docs](docs/sentry-fix.md), [example](examples/sentry-fix.yml)) - Has Claude fix a repository's most frequent production Sentry issues each week, opens a pull request for each confident fix, and resolves the issues in the release that ships them
