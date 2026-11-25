@@ -46,7 +46,11 @@ const outcome = await runReview({
     runAgent,
 });
 
-if (outcome.kind !== 'reviewed') {
+if (outcome.kind === 'failed') {
+    console.log(`The review failed: ${outcome.error.message}`);
+    console.log(`\n${renderAgentLog(outcome.error.agents)}`);
+    process.exitCode = 1;
+} else if (outcome.kind !== 'reviewed') {
     console.log(JSON.stringify(outcome, null, 2));
 } else {
     console.log(JSON.stringify(outcome.result.findings, null, 2));

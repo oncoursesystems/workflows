@@ -5,13 +5,15 @@ let messages: unknown[] = [];
 let sessions: unknown[][] = [];
 let envs: Array<Record<string, string | undefined>> = [];
 let toolOptions: Array<{ tools: string[]; allowedTools: string[] }> = [];
+let controllers: AbortController[] = [];
 
-type Options = { env: Record<string, string | undefined>; tools: string[]; allowedTools: string[] };
+type Options = { env: Record<string, string | undefined>; tools: string[]; allowedTools: string[]; abortController: AbortController };
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
     query: ({ options }: { options: Options }) => {
         envs.push(options.env);
         toolOptions.push({ tools: options.tools, allowedTools: options.allowedTools });
+        controllers.push(options.abortController);
         const session = sessions.shift() ?? messages;
         return (async function* () {
             yield* session;
@@ -70,6 +72,36 @@ describe('runAgent', () => {
         const failure = runAgent(request);
         await expect(failure).rejects.toBeInstanceOf(SessionLimitError);
         await expect(failure).rejects.toThrow(`claude-sonnet-5-5 stopped with ${subtype}: out`);
+    });
+
+    it('keeps the turns and cost of a session that hit a limit', async () => {
+        messages = [result({ subtype: 'error_max_turns', errors: ['out'], num_turns: 120, total_cost_usd: 7.9 })];
+        const error: unknown = await runAgent(request).catch((caught: unknown) => caught);
+        expect(error).toBeInstanceOf(SessionLimitError);
+        expect(error).toMatchObject({ limit: 'turns', stats: { turns: 120, costUsd: 7.9, model: 'claude-sonnet-5-5' } });
+    });
+
+    it('keeps the cost of a session that answered outside the schema', async () => {
+        messages = [result({ structured_output: { ok: 'yes' }, total_cost_usd: 0.4 })];
+        await expect(runAgent(request)).rejects.toMatchObject({ stats: { costUsd: 0.4 } });
+    });
+
+    it('stops the session when the request signal aborts, and when it was aborted before the start', async () => {
+        controllers = [];
+        sessions = [[], []];
+        const stop = new AbortController();
+        const running = runAgent({ ...request, signal: stop.signal }).catch(() => undefined);
+        stop.abort();
+        await running;
+        await runAgent({ ...request, signal: stop.signal }).catch(() => undefined);
+        expect(controllers.map((controller) => controller.signal.aborted)).toEqual([true, true]);
+    });
+
+    it('leaves the session running when no signal aborts', async () => {
+        controllers = [];
+        messages = [result({ structured_output: { ok: true } })];
+        await runAgent({ ...request, signal: new AbortController().signal });
+        expect(controllers[0]?.signal.aborted).toBe(false);
     });
 
     it('reports another failed subtype as a plain error', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReviewedFinding } from './finding.ts';
-import { inlineBody, MINOR_HEADINGS, minorHeading, renderFailed, renderRunning, renderSummary } from './report.ts';
+import { checkTitle, inlineBody, MINOR_HEADINGS, minorHeading, renderAgentLog, renderFailed, renderRunning, renderSummary } from './report.ts';
 import type { ReviewResult } from './review.ts';
 import { describeScope, startsOver } from './run.ts';
 import { readState } from './state.ts';
@@ -122,5 +122,41 @@ describe('API spend', () => {
         });
         expect(split).toContain('$1.50 ($1.50 of it on the API), 1m 5s.');
         expect(renderSummary({ repo: 'o/r', result, state, inline: [], outsideDiff: [], scope: 's' })).not.toContain('on the API');
+    });
+});
+
+describe('an agent that stopped early', () => {
+    const stoppedFinder = {
+        role: 'finder: correctness',
+        model: 'claude-opus-5-5',
+        billing: 'subscription' as const,
+        costUsd: 7.9,
+        turns: 120,
+        durationMs: 300_000,
+        tools: { Read: 80 },
+        denied: [],
+        limit: 'turns' as const,
+    };
+    const summary = renderSummary({
+        repo: 'o/r',
+        result: { ...result, agents: [stoppedFinder] },
+        state,
+        inline: [],
+        outsideDiff: [],
+        scope: 'the whole pull request',
+    });
+
+    it('says in the summary which agent stopped, after how many turns and at what cost', () => {
+        expect(summary).toContain('`finder: correctness` hit its turn limit after 120 turns and $7.90, so this review has nothing from it.');
+    });
+
+    it('says nothing about stopped agents when none stopped', () => {
+        expect(renderSummary({ repo: 'o/r', result, state, inline: [], outsideDiff: [], scope: 'the whole pull request' })).not.toContain('hit its');
+    });
+
+    it('marks the check and the agent log', () => {
+        expect(checkTitle(1, 2, 1)).toBe('1 important, 2 minor, 1 agent stopped early');
+        expect(checkTitle(1, 2)).toBe('1 important, 2 minor');
+        expect(renderAgentLog([stoppedFinder])).toContain('| hit its turn limit');
     });
 });

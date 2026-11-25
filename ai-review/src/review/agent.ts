@@ -13,6 +13,7 @@ export type AgentRequest<T> = {
     tools?: readonly string[];
     allowedTools?: readonly string[];
     env?: Readonly<Record<string, string>>;
+    signal?: AbortSignal;
 };
 
 export type Billing = 'subscription' | 'api';
@@ -43,11 +44,30 @@ export class UsageLimitError extends Error {
     override name = 'UsageLimitError';
 }
 
-export class SessionLimitError extends Error {
-    override name = 'SessionLimitError';
+export class AgentError extends Error {
+    override name = 'AgentError';
+    readonly stats: AgentStats;
+
+    constructor(message: string, stats: AgentStats) {
+        super(message);
+        this.stats = stats;
+    }
 }
 
-const SESSION_LIMITS = new Set(['error_max_turns', 'error_max_budget_usd']);
+export type SessionLimit = 'turns' | 'budget';
+
+export class SessionLimitError extends AgentError {
+    override name = 'SessionLimitError';
+
+    readonly limit: SessionLimit;
+
+    constructor(message: string, stats: AgentStats, limit: SessionLimit) {
+        super(message, stats);
+        this.limit = limit;
+    }
+}
+
+const SESSION_LIMITS: Readonly<Record<string, SessionLimit>> = { error_max_turns: 'turns', error_max_budget_usd: 'budget' };
 
 const deniedCall = ({ tool_name, tool_input }: { tool_name: string; tool_input: Record<string, unknown> }): string =>
     typeof tool_input['command'] === 'string' ? `${tool_name}(${tool_input['command']})` : tool_name;
@@ -81,6 +101,18 @@ export function runAgentWithApiFallback({ apiToken, apiOnly }: ApiFallback): Run
 }
 
 async function runSession<T>(request: AgentRequest<T>, auth: Auth): Promise<AgentRun<T>> {
+    const abortController = new AbortController();
+    const stop = () => abortController.abort();
+    if (request.signal?.aborted) stop();
+    request.signal?.addEventListener('abort', stop, { once: true });
+    try {
+        return await readSession(request, auth, abortController);
+    } finally {
+        request.signal?.removeEventListener('abort', stop);
+    }
+}
+
+async function readSession<T>(request: AgentRequest<T>, auth: Auth, abortController: AbortController): Promise<AgentRun<T>> {
     const started = Date.now();
     const tools: Record<string, number> = {};
     const session = query({
@@ -99,12 +131,13 @@ async function runSession<T>(request: AgentRequest<T>, auth: Auth): Promise<Agen
             maxTurns: request.maxTurns,
             maxBudgetUsd: request.maxBudgetUsd,
             outputFormat: { type: 'json_schema', schema: outputSchema(request.schema) },
+            abortController,
         },
     });
-    let limit: string | undefined;
+    let rateLimit: string | undefined;
     for await (const message of session) {
         if (message.type === 'rate_limit_event' && message.rate_limit_info.status === 'rejected') {
-            limit = message.rate_limit_info.rateLimitType ?? 'usage';
+            rateLimit = message.rate_limit_info.rateLimitType ?? 'usage';
         }
         if (message.type === 'assistant') {
             for (const block of message.message.content) {
@@ -112,26 +145,27 @@ async function runSession<T>(request: AgentRequest<T>, auth: Auth): Promise<Agen
             }
         }
         if (message.type !== 'result') continue;
+        const stats: AgentStats = {
+            model: request.model,
+            billing: auth.billing,
+            costUsd: message.total_cost_usd,
+            turns: message.num_turns,
+            durationMs: Date.now() - started,
+            tools,
+            denied: message.permission_denials.map(deniedCall),
+        };
         if (message.subtype !== 'success') {
             const text = `${request.model} stopped with ${message.subtype}: ${message.errors.join('; ')}`;
-            throw SESSION_LIMITS.has(message.subtype) ? new SessionLimitError(text) : new Error(text);
+            const limit = SESSION_LIMITS[message.subtype];
+            throw limit === undefined ? new AgentError(text, stats) : new SessionLimitError(text, stats, limit);
         }
-        if (limit !== undefined) throw new UsageLimitError(`Claude hit its ${limit} limit: ${message.result}`);
-        if (message.is_error) throw new Error(`${request.model} stopped with an error: ${message.result}`);
+        if (rateLimit !== undefined) throw new UsageLimitError(`Claude hit its ${rateLimit} limit: ${message.result}`);
+        if (message.is_error) throw new AgentError(`${request.model} stopped with an error: ${message.result}`, stats);
         const parsed = request.schema.safeParse(message.structured_output);
-        if (!parsed.success) throw new Error(`${request.model} returned output that does not match the schema: ${parsed.error.message}`);
-        return {
-            output: parsed.data,
-            stats: {
-                model: request.model,
-                billing: auth.billing,
-                costUsd: message.total_cost_usd,
-                turns: message.num_turns,
-                durationMs: Date.now() - started,
-                tools,
-                denied: message.permission_denials.map(deniedCall),
-            },
-        };
+        if (!parsed.success) {
+            throw new AgentError(`${request.model} returned output that does not match the schema: ${parsed.error.message}`, stats);
+        }
+        return { output: parsed.data, stats };
     }
     throw new Error(`${request.model} ended without a result`);
 }

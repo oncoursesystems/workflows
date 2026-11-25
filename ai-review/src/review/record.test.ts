@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ReviewedFinding } from './finding.ts';
-import { reviewRecord } from './record.ts';
+import { recordName, reviewRecord } from './record.ts';
+import { ReviewFailedError } from './review.ts';
 import { fingerprint, fingerprintMarker } from './state.ts';
 import { inlineBody } from './report.ts';
 
@@ -45,7 +46,39 @@ describe('reviewRecord', () => {
     });
 
     it('keeps the pull request, round, tier and cost', () => {
-        expect(record).toMatchObject({ repo: 'o/r', number: 7, round: 2, tier: 'high', costUsd: 2.5, finishedAt: '2026-11-07T12:00:00.000Z' });
+        expect(record).toMatchObject({ version: 2, outcome: 'reviewed', repo: 'o/r', number: 7, round: 2, tier: 'high', costUsd: 2.5, finishedAt: '2026-11-07T12:00:00.000Z' });
+        expect(record).not.toHaveProperty('error');
+    });
+});
+
+describe('reviewRecord for a review that failed', () => {
+    const pr = { repo: 'o/r', number: 7, title: 't', body: '', author: 'dev', baseRef: 'master', defaultBranch: 'master', headSha: 'abcdef1', draft: false, files: [] };
+    const agent = (role: string, costUsd: number) => ({ role, model: 'claude-opus-5-5', billing: 'subscription' as const, costUsd, turns: 4, durationMs: 1, tools: {}, denied: [] });
+    const failed = {
+        kind: 'failed' as const,
+        pr,
+        scope: 'the whole pull request',
+        state: { reviewedSha: 'abcdef1', round: 1, tier: 'high' as const },
+        tier: 'high' as const,
+        error: new ReviewFailedError(new Error('claude-opus-5-5 stopped with an error: overloaded'), [agent('finder: security', 1.25), agent('finder: correctness', 2.5)], 90_000),
+    };
+    const failedRecord = reviewRecord(failed, new Date('2026-11-07T12:00:00Z'));
+
+    it('keeps the error, the agents that ran and what they spent', () => {
+        expect(failedRecord).toMatchObject({
+            version: 2,
+            outcome: 'failed',
+            error: 'claude-opus-5-5 stopped with an error: overloaded',
+            tier: 'high',
+            costUsd: 3.75,
+            durationMs: 90_000,
+            findings: [],
+        });
+        expect(failedRecord.agents.map((a) => a.role)).toEqual(['finder: security', 'finder: correctness']);
+    });
+
+    it('names the artifact so a failed run stands apart from a finished one', () => {
+        expect(recordName(failed)).toBe('ai-review-7-round-1-abcdef1-failed');
     });
 });
 
