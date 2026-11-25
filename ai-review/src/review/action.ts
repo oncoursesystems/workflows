@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
-import { fetchPullRequest, parsePullRequestNumber } from '../github/client.ts';
+import { fetchPullRequest, parsePullRequestNumber, type Octokit } from '../github/client.ts';
 import { runAgent, runAgentWithApiFallback, UsageLimitError } from './agent.ts';
 import { postCheck } from './github.ts';
-import { reviewRecord } from './record.ts';
+import { recordName, reviewRecord, type RecordedOutcome } from './record.ts';
 import { renderAgentLog } from './report.ts';
+import { ReviewFailedError } from './review.ts';
 import { runReview, startsOver } from './run.ts';
 import { ANTHROPIC_AUDIENCE, exchangeIdentityToken, type Federation } from './wif.ts';
 
@@ -64,24 +65,41 @@ async function run(): Promise<void> {
             const agentLog = renderAgentLog(outcome.result.agents);
             core.info(agentLog);
             await core.summary.addRaw(outcome.summary).addCodeBlock(agentLog).write();
-            const dir = join(process.env['RUNNER_TEMP'] ?? tmpdir(), 'ai-review-record');
-            const path = join(dir, `${number}-round-${outcome.state.round}.json`);
-            await mkdir(dir, { recursive: true });
-            await writeFile(path, JSON.stringify(reviewRecord(outcome, new Date()), null, 2));
-            core.setOutput('record', path);
-            core.setOutput('record-name', `ai-review-${number}-round-${outcome.state.round}-${outcome.state.reviewedSha.slice(0, 7)}`);
+            await keepRecord(outcome);
+        }
+        if (outcome.kind === 'failed') {
+            const agentLog = renderAgentLog(outcome.error.agents);
+            core.info(agentLog);
+            await core.summary.addCodeBlock(agentLog).write();
+            await keepRecord(outcome);
+            await reportFailure(checksOctokit, outcome.pr.headSha, outcome.error);
         }
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
         const pr = await fetchPullRequest(checksOctokit, context.repo, number);
-        if (error instanceof UsageLimitError) {
-            await postCheck(checksOctokit, context.repo, pr.headSha, 'Claude usage limit', `The AI review did not run: ${message}`);
-            core.warning(message);
-            return;
-        }
-        await postCheck(checksOctokit, context.repo, pr.headSha, 'The review failed', `The AI review did not finish: ${message}`);
-        core.setFailed(message);
+        await reportFailure(checksOctokit, pr.headSha, error);
     }
+}
+
+async function keepRecord(outcome: RecordedOutcome): Promise<void> {
+    const dir = join(process.env['RUNNER_TEMP'] ?? tmpdir(), 'ai-review-record');
+    const name = recordName(outcome);
+    const path = join(dir, `${name}.json`);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path, JSON.stringify(reviewRecord(outcome, new Date()), null, 2));
+    core.setOutput('record', path);
+    core.setOutput('record-name', name);
+}
+
+async function reportFailure(octokit: Octokit, headSha: string, error: unknown): Promise<void> {
+    const message = error instanceof Error ? error.message : String(error);
+    const cause = error instanceof ReviewFailedError ? error.cause : error;
+    if (cause instanceof UsageLimitError) {
+        await postCheck(octokit, context.repo, headSha, 'Claude usage limit', `The AI review did not run: ${message}`);
+        core.warning(message);
+        return;
+    }
+    await postCheck(octokit, context.repo, headSha, 'The review failed', `The AI review did not finish: ${message}`);
+    core.setFailed(message);
 }
 
 void run();

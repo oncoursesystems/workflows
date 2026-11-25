@@ -82,7 +82,7 @@ runs:
       run: node --experimental-strip-types --no-warnings=ExperimentalWarning "${{ github.action_path }}/../../../ai-review/src/review/action.ts"
 
     - name: Keep the review record
-      if: steps.review.outputs.record != ''
+      if: ${{ !cancelled() && steps.review.outputs.record != '' }}
       uses: actions/upload-artifact@v7
       with:
         name: ${{ steps.review.outputs.record-name }}

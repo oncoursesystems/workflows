@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { SessionLimit } from './agent.ts';
 import type { ReviewedFinding } from './finding.ts';
 import { findersFor, VERIFIER_MODEL } from './plan.ts';
 import type { AgentReport, ReviewResult } from './review.ts';
@@ -43,6 +44,18 @@ function apiShare(agents: readonly AgentReport[]): string {
 }
 
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+const LIMIT_NAMES: Readonly<Record<SessionLimit, string>> = { turns: 'turn limit', budget: 'budget' };
+
+const stoppedEarly = (agents: readonly AgentReport[]): string[] =>
+    agents.flatMap((agent) =>
+        agent.limit === undefined
+            ? []
+            : [
+                  `\`${agent.role}\` hit its ${LIMIT_NAMES[agent.limit]} after ${plural(agent.turns, 'turn')} and $${agent.costUsd.toFixed(2)}, ` +
+                      'so this review has nothing from it.',
+              ],
+    );
 
 const roundLine = (state: ReviewState, scope: string, verb: string): string =>
     `${verb} \`${shortSha(state.reviewedSha)}\`, ${scope} (round ${state.round} of ${MAX_ROUNDS}).`;
@@ -102,6 +115,7 @@ export function renderSummary({ repo, result, state, inline, outsideDiff, scope,
         `${result.tier[0]?.toUpperCase()}${result.tier.slice(1)} risk: ${plural(finders.length, 'bug finder')} on ` +
             `\`${finders[0]?.model ?? ''}\`, and 3 reviewers on \`${VERIFIER_MODEL}\` for each finding.`,
         ...notes,
+        ...stoppedEarly(result.agents),
         '',
         headline,
         ...section('Important, outside the diff', repo, sha, outsideDiff),
@@ -147,8 +161,8 @@ export function renderRoundLimit(state: ReviewState): string {
     ].join('\n');
 }
 
-export function checkTitle(important: number, minor: number): string {
-    return `${important} important, ${minor} minor`;
+export function checkTitle(important: number, minor: number, stopped = 0): string {
+    return `${important} important, ${minor} minor${stopped === 0 ? '' : `, ${plural(stopped, 'agent')} stopped early`}`;
 }
 
 export function renderAgentLog(agents: readonly AgentReport[]): string {
@@ -157,8 +171,9 @@ export function renderAgentLog(agents: readonly AgentReport[]): string {
             .map(([name, count]) => `${name} ${count}`)
             .join(', ');
         const denied = agent.denied.length === 0 ? '' : ` | denied: ${agent.denied.join(', ')}`;
+        const stopped = agent.limit === undefined ? '' : ` | hit its ${LIMIT_NAMES[agent.limit]}`;
         return `${agent.role} | ${agent.model} | ${agent.billing} | ${plural(agent.turns, 'turn')} | ${tools || 'no tool calls'} | ` +
-            `$${agent.costUsd.toFixed(2)} | ${seconds(agent.durationMs)}s${denied}`;
+            `$${agent.costUsd.toFixed(2)} | ${seconds(agent.durationMs)}s${denied}${stopped}`;
     });
     return ['role | model | billing | turns | tool calls | cost | time', ...rows].join('\n');
 }

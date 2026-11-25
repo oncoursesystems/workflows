@@ -1,5 +1,6 @@
 import { fetchPullRequest, type Octokit, type RepoRef } from '../github/client.ts';
 import type { ChangedFile, PullRequest } from '../github/pull-request.ts';
+import type { Tier } from '../risk/tier.ts';
 import type { RunAgent } from './agent.ts';
 import type { ReviewedFinding } from './finding.ts';
 import {
@@ -16,7 +17,7 @@ import {
     type Summary,
 } from './github.ts';
 import { checkTitle, inlineBody, renderFailed, renderRoundLimit, renderRunning, renderSummary } from './report.ts';
-import { review, type ReviewResult } from './review.ts';
+import { review, ReviewFailedError, type ReviewResult } from './review.ts';
 import { fingerprint, planRound, readState, rightSideLines, type ReviewState } from './state.ts';
 
 export type RunOptions = {
@@ -46,7 +47,8 @@ export type RunOutcome =
           inline: ReviewedFinding[];
           outsideDiff: ReviewedFinding[];
           summary: string;
-      };
+      }
+    | { kind: 'failed'; pr: PullRequest; scope: string; state: ReviewState; tier: Tier; error: ReviewFailedError };
 
 export const startsOver = (eventName: string, startOverInput: string): boolean =>
     eventName === 'workflow_dispatch' && startOverInput !== 'false';
@@ -110,6 +112,7 @@ export async function runReview(options: RunOptions): Promise<RunOutcome> {
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (options.publish) await upsertSummary(octokit, repo, number, summaryComment, renderFailed(state, message, previous));
+        if (error instanceof ReviewFailedError) return { kind: 'failed', pr, scope: describeScope(scope), state, tier, error };
         throw error;
     }
 
@@ -129,6 +132,7 @@ export async function runReview(options: RunOptions): Promise<RunOutcome> {
     );
     await upsertSummary(octokit, repo, number, summaryComment, summary);
     const minor = result.findings.filter((finding) => finding.placement === 'minor').length;
-    await postCheck(options.checksOctokit, repo, pr.headSha, checkTitle(inline.length + outsideDiff.length, minor), summary);
+    const stopped = result.agents.filter((agent) => agent.limit !== undefined).length;
+    await postCheck(options.checksOctokit, repo, pr.headSha, checkTitle(inline.length + outsideDiff.length, minor, stopped), summary);
     return outcome;
 }
