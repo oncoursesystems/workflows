@@ -117,7 +117,7 @@ describe('runFixer', () => {
     });
 
     it('reports a session that ran out of budget or turns as exhausted, which is a no-fix', async () => {
-        const { runAgent } = agent(() => {}, new SessionLimitError('claude-opus-5-5 stopped with error_max_budget_usd: over budget'));
+        const { runAgent } = agent(() => {}, new SessionLimitError('claude-opus-5-5 stopped with error_max_budget_usd: over budget', stats, 'budget'));
         await expect(run(runAgent)).resolves.toEqual({
             status: 'exhausted',
             reason: 'The fixer ran out of budget or turns before it found a fix: claude-opus-5-5 stopped with error_max_budget_usd: over budget',
