@@ -5,7 +5,7 @@ import { DuplicateGroups, FinderOutput, Verdict, type Candidate } from './findin
 import { tierFromLabels } from './github.ts';
 import { findersFor, MERGER_MODEL, MODELS, VERIFIER_MODEL } from './plan.ts';
 import { FINDER_RETRY_NOTE, verifierPrompt } from './prompts.ts';
-import { review, ReviewFailedError } from './review.ts';
+import { FINDER_MAX_TURNS, review, ReviewFailedError } from './review.ts';
 
 const pr: PullRequest = {
     repo: 'o/r',
@@ -170,6 +170,13 @@ describe('review when an agent stops early', () => {
             return agent.runAgent(request);
         };
     };
+
+    it('gives each finder 120 turns', async () => {
+        const agent = fakeAgent([], {});
+        await review(input, agent.runAgent);
+        expect(agent.requests.filter((r) => r.schema === FinderOutput).map((r) => r.maxTurns)).toEqual([120, 120, 120]);
+        expect(FINDER_MAX_TURNS).toBe(120);
+    });
 
     it('keeps going with the other finders when one runs out of turns, and records what it spent', async () => {
         const agent = fakeAgent([candidate(10, 'confirmed bug')], { 'confirmed bug': [true, true, false] });

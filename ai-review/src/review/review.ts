@@ -46,7 +46,7 @@ export type ReviewResult = {
 
 export const MAX_CONCURRENT_AGENTS = 4;
 
-export const FINDER_MAX_TURNS = 60;
+export const FINDER_MAX_TURNS = 120;
 
 export class ReviewFailedError extends Error {
     override name = 'ReviewFailedError';
